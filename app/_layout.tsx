@@ -54,6 +54,22 @@ export default function RootLayout() {
                 },
             }}>
                 <Stack.Screen name="index" options={{ headerShown: false }} />
+                {/*<Stack.Screen
+                    name="create-profile"
+                    options={{
+                        headerShown: false,
+                        // Prevent going back to OTP screen
+                        gestureEnabled: false
+                    }}
+                />*/}
+               {/* <Stack.Screen
+                    name="Home"
+                    options={{
+                        headerShown: false,
+                        // Prevent going back to auth screens
+                        gestureEnabled: false
+                    }}
+                />*/}
                 <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             </Stack>
         </>
