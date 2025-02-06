@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text } from 'react-native';
 
-const Categories = () => {
+const History = () => {
     return (
         <View>
             <Text>Layout Component</Text>
@@ -9,4 +9,4 @@ const Categories = () => {
     );
 };
 
-export default Categories;
+export default History;
