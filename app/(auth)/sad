@@ -1,0 +1,94 @@
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, SafeAreaView, Image } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useColorScheme } from 'nativewind';
+
+export default function SignIn() {
+    const [showPassword, setShowPassword] = useState(false);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const { colorScheme } = useColorScheme();
+
+    return (
+        <SafeAreaView className="flex-1 bg-white dark:bg-gray-900">
+            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+
+            {/* Header with gradient */}
+            <View className="h-72 bg-gradient-to-b from-green-200 to-green-300 dark:from-green-700 dark:to-green-800 rounded-b-[40px] items-center justify-center">
+                {/* Logo */}
+                <Image
+                    source={require('@/assets/images/logo2.png')}
+                    className="w-24 h-24 mb-4"
+                    resizeMode="contain"
+                />
+                <Text className="text-4xl text-pbold text-white">
+                    Madadgar
+                </Text>
+            </View>
+
+            {/* Login Form */}
+            <View className="px-8 pt-12">
+                <Text className="text-xl text-gray-800 dark:text-gray-200 mb-2">
+                    Email
+                </Text>
+                <TextInput
+                    className="w-full h-12 bg-green-50 dark:bg-green-900 rounded-xl px-4 mb-6 text-gray-800 dark:text-gray-200"
+                    placeholder="Enter your email"
+                    placeholderTextColor={colorScheme === 'dark' ? '#9CA3AF' : '#6B7280'}
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                />
+
+                <Text className="text-xl text-gray-800 dark:text-gray-200 mb-2">
+                    Password
+                </Text>
+                <View className="relative">
+                    <TextInput
+                        className="w-full h-12 bg-green-50 dark:bg-green-900 rounded-xl px-4 mb-8 text-gray-800 dark:text-gray-200"
+                        placeholder="Enter your password"
+                        placeholderTextColor={colorScheme === 'dark' ? '#9CA3AF' : '#6B7280'}
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry={!showPassword}
+                    />
+                    <TouchableOpacity
+                        className="absolute right-4 top-3"
+                        onPress={() => setShowPassword(!showPassword)}
+                    >
+                        <Image
+                            source={showPassword ? require('@/assets/images/logo2.png') : require('@/assets/images/logo2.png')}
+                            className="w-6 h-6"
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Login Button */}
+                <TouchableOpacity
+                    className="w-full h-12 bg-green-300 dark:bg-green-700 rounded-full items-center justify-center mb-6"
+                    onPress={() => console.log('Login pressed')}
+                >
+                    <Text className="text-white text-lg font-semibold">
+                        Login
+                    </Text>
+                </TouchableOpacity>
+
+                {/* Sign Up Link */}
+                <View className="flex-row justify-center">
+                    <Text className="text-gray-600 dark:text-gray-400">
+                        Don't have an account?{' '}
+                    </Text>
+                    <TouchableOpacity onPress={() => console.log('Sign up pressed')}>
+                        <Text className="text-green-500 dark:text-green-400 font-semibold">
+                            Sign Up
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </SafeAreaView>
+    );
+}
+
+\
