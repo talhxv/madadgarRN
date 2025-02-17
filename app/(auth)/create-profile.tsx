@@ -1,286 +1,435 @@
-import React, { useState, useEffect } from 'react';
+"use client"
+
+import { useState, useEffect } from "react"
 import {
-    View, Text, TouchableOpacity, ImageBackground, Platform,
-    KeyboardAvoidingView, TextInput, Alert, ScrollView, Image
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { router } from "expo-router";
-import { supabase } from '@/supabaseClient';
-import * as ImagePicker from 'expo-image-picker';
-import { BlurView } from 'expo-blur';
-import { uploadToS3, compareFaces } from '@/lib/aws-config';
+    View,
+    Text,
+    TouchableOpacity,
+    ImageBackground,
+    Platform,
+    KeyboardAvoidingView,
+    TextInput,
+    Alert,
+    Image,
+} from "react-native"
+import { StatusBar } from "expo-status-bar"
+import { router } from "expo-router"
+import { supabase } from "@/supabaseClient"
+import * as ImagePicker from "expo-image-picker"
+import { BlurView } from "expo-blur"
+import { uploadToS3, compareFaces } from "@/lib/aws-config"
 
 interface Profile {
-    name: string;
-    address: string;
-    dob: Date;
-    nicNumber: string;
+    name: string
+    address: string
+    dob: Date
+    nicNumber: string
 }
 
 export default function CreateProfileScreen() {
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [nicImage, setNicImage] = useState<string | null>(null);
-    const [selfieImage, setSelfieImage] = useState<string | null>(null);
-    const [dateInput, setDateInput] = useState('');
-    const [sessionData, setSessionData] = useState<any>(null);
+    const [step, setStep] = useState(1)
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [nicImage, setNicImage] = useState<string | null>(null)
+    const [selfieImage, setSelfieImage] = useState<string | null>(null)
+    const [dateInput, setDateInput] = useState("")
+    const [sessionData, setSessionData] = useState<any>(null)
+    const [verificationError, setVerificationError] = useState<string | null>(null)
 
     const [profile, setProfile] = useState<Profile>({
-        name: '',
-        address: '',
+        name: "",
+        address: "",
         dob: new Date(),
-        nicNumber: ''
-    });
+        nicNumber: "",
+    })
 
     useEffect(() => {
-        getSession();
-    }, []);
+        getSession()
+    }, [])
 
     const getSession = async () => {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const {
+            data: { session },
+            error,
+        } = await supabase.auth.getSession()
         if (error) {
-            console.error('Session Error:', error);
-            router.replace('/');
-            return;
+            console.error("Session Error:", error)
+            router.replace("/")
+            return
         }
-        setSessionData(session);
-    };
+        setSessionData(session)
+    }
+
     const handleDateInput = (text: string) => {
-        setDateInput(text);
-        const cleaned = text.replace(/\D/g, '');
+        setDateInput(text)
+        const cleaned = text.replace(/\D/g, "")
         if (cleaned.length >= 4) {
-            const month = cleaned.slice(0, 2);
-            const day = cleaned.slice(2, 4);
-            const year = cleaned.slice(4, 8);
+            const month = cleaned.slice(0, 2)
+            const day = cleaned.slice(2, 4)
+            const year = cleaned.slice(4, 8)
 
             if (cleaned.length >= 4 && cleaned.length < 8) {
-                setDateInput(`${month}/${day}/${year}`);
+                setDateInput(`${month}/${day}/${year}`)
             } else if (cleaned.length >= 8) {
-                const date = new Date(`${year}-${month}-${day}`);
+                const date = new Date(`${year}-${month}-${day}`)
                 if (!isNaN(date.getTime())) {
-                    setDateInput(`${month}/${day}/${year}`);
-                    setProfile({ ...profile, dob: date });
+                    setDateInput(`${month}/${day}/${year}`)
+                    setProfile({ ...profile, dob: date })
                 }
             }
         }
-    };
-    const pickImage = async (type: 'nic' | 'selfie') => {
+    }
+
+    const pickImage = async (type: "nic" | "selfie") => {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
-                aspect: type === 'selfie' ? [1, 1] : [4, 3],
+                aspect: type === "selfie" ? [1, 1] : [4, 3],
                 quality: 0.7,
-            });
+            })
 
             if (!result.canceled && result.assets && result.assets.length > 0) {
-                const selectedAsset = result.assets[0];
-                if (type === 'nic') {
-                    setNicImage(selectedAsset.uri);
+                const selectedAsset = result.assets[0]
+                if (type === "nic") {
+                    setNicImage(selectedAsset.uri)
                 } else {
-                    setSelfieImage(selectedAsset.uri);
+                    setSelfieImage(selectedAsset.uri)
                 }
+                setVerificationError(null)
             }
         } catch (error) {
-            console.error('Image picker error:', error);
-            Alert.alert('Error', 'Failed to pick image. Please try again.');
+            console.error("Image picker error:", error)
+            Alert.alert("Error", "Failed to pick image. Please try again.")
         }
-    };
+    }
 
     const handleCreateProfile = async () => {
         try {
-            setLoading(true);
-            setError(null);
+            setLoading(true)
+            setError(null)
 
-            if (!sessionData?.user) throw new Error('No authenticated user found');
-            if (!nicImage || !selfieImage) throw new Error('Both photos are required');
+            if (!sessionData?.user) throw new Error("No authenticated user found")
+            if (!nicImage || !selfieImage) throw new Error("Both photos are required")
 
-            const nicFileName = `nic-${sessionData.user.id}-${Date.now()}.jpg`;
-            const selfieFileName = `selfie-${sessionData.user.id}-${Date.now()}.jpg`;
+            const nicFileName = `nic-${sessionData.user.id}-${Date.now()}.jpg`
+            const selfieFileName = `selfie-${sessionData.user.id}-${Date.now()}.jpg`
 
             // Upload images to S3
             const [nicUrl, selfieUrl] = await Promise.all([
                 uploadToS3(nicImage, nicFileName),
-                uploadToS3(selfieImage, selfieFileName)
-            ]);
-
+                uploadToS3(selfieImage, selfieFileName),
+            ])
 
             // Compare faces using Rekognition
-            const compareResult = await compareFaces(nicImage, selfieImage);
-            const similarity = compareResult.FaceMatches?.[0]?.Similarity || 0;
-            const isVerified = similarity >= 50;
+            try {
+                const compareResult = await compareFaces(nicImage, selfieImage)
+                const similarity = compareResult.FaceMatches?.[0]?.Similarity || 0
+                const isVerified = similarity >= 50
 
-            if (!isVerified) {
-                throw new Error('Face verification failed. Please ensure photos are clear and try again.');
+                if (!isVerified) {
+                    setVerificationError("Face verification failed. Please ensure photos are clear and try again.")
+                    setStep(4) // Stay on the photo step
+                    return
+                }
+
+                const phoneNumber = sessionData.user.phone?.replace("+", "") || ""
+
+                // Create profile in Supabase
+                const { error: profileError } = await supabase.from("profiles").insert([
+                    {
+                        user_id: sessionData.user.id,
+                        full_name: profile.name,
+                        address: profile.address,
+                        phone_number: phoneNumber,
+                        dob: profile.dob.toISOString().split("T")[0],
+                        nic_number: profile.nicNumber,
+                        is_verified: isVerified,
+                    },
+                ])
+
+                if (profileError) throw profileError
+
+                // Create verification record
+                const { error: verificationError } = await supabase.from("user_verifications").insert([
+                    {
+                        user_id: sessionData.user.id,
+                        nic_image_url: nicUrl.Location,
+                        selfie_image_url: selfieUrl.Location,
+                        verification_score: similarity,
+                        is_verified: isVerified,
+                        verified_at: new Date().toISOString(),
+                    },
+                ])
+
+                if (verificationError) throw verificationError
+
+                setStep(5) // Move to success step
+            } catch (error: any) {
+                if (error.name === "InvalidParameterException") {
+                    setVerificationError("No face detected in one or both images. Please try again with clear photos.")
+                    setStep(4) // Stay on the photo step
+                    return
+                }
+                throw error
             }
-
-            const phoneNumber = sessionData.user.phone?.replace('+', '') || '';
-
-            // Create profile in Supabase
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .insert([{
-                    user_id: sessionData.user.id,
-                    full_name: profile.name,
-                    address: profile.address,
-                    phone_number: phoneNumber,
-                    dob: profile.dob.toISOString().split('T')[0],
-                    nic_number: profile.nicNumber,
-                    is_verified: isVerified
-                }]);
-
-            if (profileError) throw profileError;
-
-            // Create verification record
-            const { error: verificationError } = await supabase
-                .from('user_verifications')
-                .insert([{
-                    user_id: sessionData.user.id,
-                    nic_image_url: nicUrl.Location,
-                    selfie_image_url: selfieUrl.Location,
-                    verification_score: similarity,
-                    is_verified: isVerified,
-                    verified_at: new Date().toISOString()
-                }]);
-
-            if (verificationError) throw verificationError;
-
-            Alert.alert('Success', 'Profile created successfully!');
-            router.replace('/Home');
-
         } catch (error: any) {
-            console.error('Full Error Object:', JSON.stringify(error, null, 2));
-            console.error('Error Name:', error.name);
-            console.error('Error Message:', error.message);
-            console.error('Error Stack:', error.stack);
-            setError(error.message || 'An unknown error occurred');
-            Alert.alert('Error', error.message);
+            console.error("Profile Creation Error:", error)
+            setError(error.message || "An unknown error occurred")
+            Alert.alert("Error", error.message)
         } finally {
-            setLoading(false);
+            setLoading(false)
         }
-    };
+    }
 
-    return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ flex: 1 }}
-        >
-            <StatusBar style="dark" />
-            <ImageBackground
-                source={require('@/assets/images/meow3.png')}
-                style={{ flex: 1 }}
-                resizeMode="cover"
-            >
-                <BlurView intensity={60} style={{ flex: 1 }}>
-                    <ScrollView
-                        style={{ flex: 1 }}
-                        contentContainerStyle={{ padding: 24, paddingTop: 40, paddingBottom: 40 }}
-                        showsVerticalScrollIndicator={false}
-                    >
-                        <View style={{ alignItems: 'center', marginBottom: 32 }}>
-                            <Image
-                                source={require('@/assets/images/logoblack.png')}
-                                style={{ width: 80, height: 80 }}
-                                resizeMode="contain"
+    const renderProgressDots = () => (
+        <View className="flex-row justify-center space-x-3 mb-2">
+            {[1, 2, 3, 4, 5].map((dotStep) => (
+                <View key={dotStep} className={`w-3 h-3 mr-3 rounded-full ${step >= dotStep ? "bg-mdgreen" : "bg-gray-300"}`} />
+            ))}
+        </View>
+    )
+
+    const renderStep = () => {
+        switch (step) {
+            case 1:
+                return (
+                    <View>
+                        <View className="mb-4">
+                            <Text className="text-gray-700 mb-2 font-psemibold">Full Name</Text>
+                            <TextInput
+                                className="bg-white/80 rounded-xl px-4 py-6"
+                                placeholder="Enter your full name"
+                                value={profile.name}
+                                onChangeText={(value) => setProfile({ ...profile, name: value })}
                             />
                         </View>
 
-                        <View className="space-y-4">
-                            <Text className="text-2xl font-pbold text-gray-800">Create Profile</Text>
+                        <TouchableOpacity
+                            className="bg-mdgreen rounded-xl py-4 mt-6"
+                            onPress={() => (profile.name ? setStep(2) : Alert.alert("Required", "Please enter your full name"))}
+                        >
+                            <Text className="text-white text-center font-psemibold text-lg">Next</Text>
+                        </TouchableOpacity>
+                    </View>
+                )
 
-                            <View>
-                                <Text className="text-gray-700 mb-2 font-psemibold">Full Name</Text>
-                                <TextInput
-                                    className="bg-white/80 rounded-xl px-4 py-3"
-                                    placeholder="Enter your full name"
-                                    value={profile.name}
-                                    onChangeText={(value) => setProfile({...profile, name: value})}
-                                />
-                            </View>
+            case 2:
+                return (
+                    <View>
+                        <View className="mb-4">
+                            <Text className="text-gray-700 mb-2 font-psemibold">Address</Text>
+                            <TextInput
+                                className="bg-white/80 rounded-xl px-4 py-6"
+                                placeholder="Enter your address"
+                                value={profile.address}
+                                onChangeText={(value) => setProfile({ ...profile, address: value })}
+                                multiline
+                            />
+                        </View>
 
-                            <View>
-                                <Text className="text-gray-700 mb-2 font-psemibold">Address</Text>
-                                <TextInput
-                                    className="bg-white/80 rounded-xl px-4 py-3"
-                                    placeholder="Enter your address"
-                                    value={profile.address}
-                                    onChangeText={(value) => setProfile({...profile, address: value})}
-                                />
-                            </View>
-
-                            <View>
-                                <Text className="text-gray-700 mb-2 font-psemibold">NIC Number</Text>
-                                <TextInput
-                                    className="bg-white/80 rounded-xl px-4 py-3"
-                                    placeholder="Enter your NIC number"
-                                    value={profile.nicNumber}
-                                    onChangeText={(value) => setProfile({...profile, nicNumber: value})}
-                                />
-                            </View>
-
-                            <View>
-                                <Text className="text-gray-700 mb-2 font-psemibold">Date of Birth</Text>
-                                <TextInput
-                                    className="bg-white/80 rounded-xl px-4 py-3"
-                                    placeholder="MM/DD/YYYY"
-                                    value={dateInput}
-                                    onChangeText={handleDateInput}
-                                    maxLength={10}
-                                    keyboardType="numeric"
-                                />
-                            </View>
-
-                            <View className="space-y-4 mt-4">
-                                <View>
-                                    <Text className="text-gray-700 mb-2 font-psemibold">NIC Photo</Text>
-                                    <TouchableOpacity
-                                        className="bg-white/80 rounded-xl p-4 items-center"
-                                        onPress={() => pickImage('nic')}
-                                    >
-                                        {nicImage ? (
-                                            <Image
-                                                source={{ uri: nicImage }}
-                                                style={{ width: 200, height: 150 }}
-                                                resizeMode="contain"
-                                            />
-                                        ) : (
-                                            <Text>Upload NIC Photo</Text>
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
-
-                                <View>
-                                    <Text className="text-gray-700 mb-2 font-psemibold">Selfie Photo</Text>
-                                    <TouchableOpacity
-                                        className="bg-white/80 rounded-xl p-4 items-center"
-                                        onPress={() => pickImage('selfie')}
-                                    >
-                                        {selfieImage ? (
-                                            <Image
-                                                source={{ uri: selfieImage }}
-                                                style={{ width: 150, height: 150 }}
-                                                resizeMode="contain"
-                                            />
-                                        ) : (
-                                            <Text>Upload Selfie Photo</Text>
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-
+                        <View className="flex-row justify-between space-x-4 mt-6">
                             <TouchableOpacity
-                                className="bg-mdgreen rounded-xl py-4 mt-6 mb-6"
-                                onPress={handleCreateProfile}
-                                disabled={loading || !profile.name || !profile.address || !profile.nicNumber || !dateInput || !nicImage || !selfieImage}
+                                className="flex-1 bg-mdgreen rounded-xl py-4"
+                                onPress={() => (profile.address ? setStep(3) : Alert.alert("Required", "Please enter your address"))}
                             >
-                                <Text className="text-white text-center font-psemibold text-lg">
-                                    {loading ? 'Creating Profile...' : 'Create Profile'}
-                                </Text>
+                                <Text className="text-white text-center font-psemibold text-lg">Next</Text>
                             </TouchableOpacity>
                         </View>
-                    </ScrollView>
-                </BlurView>
-            </ImageBackground>
-        </KeyboardAvoidingView>
-    );
+                    </View>
+                )
+
+            case 3:
+                return (
+                    <View>
+                        <View className="mb-4">
+                            <Text className="text-gray-700 mb-2 font-psemibold">Date of Birth</Text>
+                            <TextInput
+                                className="bg-white/80 rounded-xl px-4 py-3"
+                                placeholder="MM/DD/YYYY"
+                                value={dateInput}
+                                onChangeText={handleDateInput}
+                                maxLength={10}
+                                keyboardType="numeric"
+                            />
+                        </View>
+
+                        <View className="mb-4">
+                            <Text className="text-gray-700 mb-2 font-psemibold">NIC Number</Text>
+                            <TextInput
+                                className="bg-white/80 rounded-xl px-4 py-3"
+                                placeholder="Enter your NIC number"
+                                value={profile.nicNumber}
+                                onChangeText={(value) => setProfile({ ...profile, nicNumber: value })}
+                            />
+                        </View>
+
+                        <View className="flex-row justify-between space-x-4 mt-6">
+                            <TouchableOpacity
+                                className="flex-1 bg-mdgreen rounded-xl py-4"
+                                onPress={() => {
+                                    if (!dateInput || !profile.nicNumber) {
+                                        Alert.alert("Required", "Please fill in all fields")
+                                        return
+                                    }
+                                    setStep(4)
+                                }}
+                            >
+                                <Text className="text-white text-center font-psemibold text-lg">Next</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )
+
+            case 4:
+                return (
+                    <View className="flex-1">
+                        {verificationError && (
+                            <View className="bg-red-100 p-4 rounded-xl mb-4">
+                                <Text className="text-red-600 font-psemibold">{verificationError}</Text>
+                            </View>
+                        )}
+
+                        <View className="flex-row justify-between mb-4">
+                            <View className="w-[48%]">
+                                <Text className="text-gray-700 mb-2 font-psemibold">NIC Photo</Text>
+                                <TouchableOpacity
+                                    className="bg-white/80 rounded-xl p-2 items-center justify-center h-[120px]"
+                                    onPress={() => pickImage("nic")}
+                                >
+                                    {nicImage ? (
+                                        <Image
+                                            source={{ uri: nicImage }}
+                                            style={{ width: '100%', height: '100%', borderRadius: 10 }}
+                                            resizeMode="cover"
+                                        />
+                                    ) : (
+                                        <Text className="text-gray-500">Upload NIC Photo</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+
+                            <View className="w-[48%]">
+                                <Text className="text-gray-700 mb-2 font-psemibold">Selfie Photo</Text>
+                                <TouchableOpacity
+                                    className="bg-white/80 rounded-xl p-2 items-center justify-center h-[120px]"
+                                    onPress={() => pickImage("selfie")}
+                                >
+                                    {selfieImage ? (
+                                        <Image
+                                            source={{ uri: selfieImage }}
+                                            style={{ width: '100%', height: '100%', borderRadius: 10 }}
+                                            resizeMode="cover"
+                                        />
+                                    ) : (
+                                        <Text className="text-gray-500">Upload Selfie Photo</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            className="bg-mdgreen rounded-xl py-4 mt-4"
+                            onPress={handleCreateProfile}
+                            disabled={loading || !nicImage || !selfieImage}
+                        >
+                            <Text className="text-white text-center font-psemibold text-lg">
+                                {loading ? "Verifying..." : "Verify & Create"}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                )
+            case 5:
+                return (
+                    <View>
+                        <TouchableOpacity
+                            className="bg-mdgreen rounded-xl py-4 mt-6"
+                            onPress={() => router.replace("/(tabs)/Home")}
+                        >
+                            <Text className="text-white text-center font-psemibold text-lg">Proceed to Home</Text>
+                        </TouchableOpacity>
+                    </View>
+                )
+        }
+    }
+
+    return (
+        <View style={{ flex: 1 }}>
+            <StatusBar style="dark" />
+            <ImageBackground
+                source={require("@/assets/images/lol.png")}
+                style={{ position: "absolute", width: "100%", height: "100%" }}
+                resizeMode="cover"
+            />
+            <BlurView intensity={60} style={{ flex: 1 }}>
+                {step > 1 && (
+                    <TouchableOpacity className="absolute top-12 left-4 z-10" onPress={() => setStep(step - 1)}>
+                        <Image source={require("@/assets/images/arrow-left.png")} style={{ width: 24, height: 24 }} />
+                    </TouchableOpacity>
+                )}
+                <View className="flex-1">
+                    {/* Top Section */}
+                    <View className=" items-center pt-28 mt-20 mb-8">
+                        <Image
+                            source={require("@/assets/images/logoblack.png")}
+                            style={{ width: 80, height: 80 }}
+                            resizeMode="contain"
+                        />
+                    </View>
+
+                    {/* Content Section */}
+                    <View className="flex-1 px-6 pt-4">
+                        {/* Title Section - Moved further down */}
+                        <View className="mb-8 mt-auto">
+                            {renderProgressDots()}
+                            <View className="mt-4">
+                                {step === 1 && (
+                                    <>
+                                        <Text className="text-2xl font-pbold text-gray-800">Create your Profile</Text>
+                                        <Text className="text-base text-gray-600 font-pregular">
+                                            We will need some personal details from you.
+                                        </Text>
+                                    </>
+                                )}
+                                {step === 2 && (
+                                    <>
+                                        <Text className="text-2xl font-pbold text-gray-800">Your Address</Text>
+                                        <Text className="text-base text-gray-600 font-pregular">Where can we find you?</Text>
+                                    </>
+                                )}
+                                {step === 3 && (
+                                    <>
+                                        <Text className="text-2xl font-pbold text-gray-800">Personal Details</Text>
+                                        <Text className="text-base text-gray-600 font-pregular">Your date of birth and NIC number</Text>
+                                    </>
+                                )}
+                                {step === 4 && (
+                                    <>
+                                        <Text className="text-2xl font-pbold text-gray-800">Verify Identity</Text>
+                                        <Text className="text-base text-gray-600 font-pregular">
+                                            Upload your NIC and a selfie for verification
+                                        </Text>
+                                    </>
+                                )}
+                                {step === 5 && (
+                                    <>
+                                        <Text className="text-2xl font-pbold text-gray-800">Profile Created!</Text>
+                                        <Text className="text-base text-gray-600 font-pregular mt-2 text-center">
+                                            Your profile has been created and verified successfully.
+                                        </Text>
+                                    </>
+                                )}
+                            </View>
+                        </View>
+
+                        {/* Form Section - Moved upwards */}
+                        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="mb-auto">
+                            {renderStep()}
+                        </KeyboardAvoidingView>
+                    </View>
+                </View>
+            </BlurView>
+        </View>
+    )
 }
+
