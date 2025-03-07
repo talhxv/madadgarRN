@@ -21,7 +21,6 @@ import { uploadToS3, compareFaces } from "@/lib/aws-config"
 
 interface Profile {
     name: string
-    address: string
     dob: Date
     nicNumber: string
 }
@@ -38,10 +37,9 @@ export default function CreateProfileScreen() {
 
     const [profile, setProfile] = useState<Profile>({
         name: "",
-        address: "",
         dob: new Date(),
         nicNumber: "",
-    })
+    });
 
     useEffect(() => {
         getSession()
@@ -129,7 +127,7 @@ export default function CreateProfileScreen() {
 
                 if (!isVerified) {
                     setVerificationError("Face verification failed. Please ensure photos are clear and try again.")
-                    setStep(4) // Stay on the photo step
+                    setStep(3) // Stay on the photo step
                     return
                 }
 
@@ -140,7 +138,6 @@ export default function CreateProfileScreen() {
                     {
                         user_id: sessionData.user.id,
                         full_name: profile.name,
-                        address: profile.address,
                         phone_number: phoneNumber,
                         dob: profile.dob.toISOString().split("T")[0],
                         nic_number: profile.nicNumber,
@@ -164,11 +161,11 @@ export default function CreateProfileScreen() {
 
                 if (verificationError) throw verificationError
 
-                setStep(5) // Move to success step
+                setStep(4) // Move to success step
             } catch (error: any) {
                 if (error.name === "InvalidParameterException") {
                     setVerificationError("No face detected in one or both images. Please try again with clear photos.")
-                    setStep(4) // Stay on the photo step
+                    setStep(3) // Stay on the photo step
                     return
                 }
                 throw error
@@ -184,7 +181,7 @@ export default function CreateProfileScreen() {
 
     const renderProgressDots = () => (
         <View className="flex-row justify-center space-x-3 mb-2">
-            {[1, 2, 3, 4, 5].map((dotStep) => (
+            {[1, 2, 3, 4].map((dotStep) => (
                 <View key={dotStep} className={`w-3 h-3 mr-3 rounded-full ${step >= dotStep ? "bg-mdgreen" : "bg-gray-300"}`} />
             ))}
         </View>
@@ -218,31 +215,6 @@ export default function CreateProfileScreen() {
                 return (
                     <View>
                         <View className="mb-4">
-                            <Text className="text-gray-700 mb-2 font-psemibold">Address</Text>
-                            <TextInput
-                                className="bg-white/80 rounded-xl px-4 py-6"
-                                placeholder="Enter your address"
-                                value={profile.address}
-                                onChangeText={(value) => setProfile({ ...profile, address: value })}
-                                multiline
-                            />
-                        </View>
-
-                        <View className="flex-row justify-between space-x-4 mt-6">
-                            <TouchableOpacity
-                                className="flex-1 bg-mdgreen rounded-xl py-4"
-                                onPress={() => (profile.address ? setStep(3) : Alert.alert("Required", "Please enter your address"))}
-                            >
-                                <Text className="text-white text-center font-psemibold text-lg">Next</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )
-
-            case 3:
-                return (
-                    <View>
-                        <View className="mb-4">
                             <Text className="text-gray-700 mb-2 font-psemibold">Date of Birth</Text>
                             <TextInput
                                 className="bg-white/80 rounded-xl px-4 py-3"
@@ -272,7 +244,7 @@ export default function CreateProfileScreen() {
                                         Alert.alert("Required", "Please fill in all fields")
                                         return
                                     }
-                                    setStep(4)
+                                    setStep(3)
                                 }}
                             >
                                 <Text className="text-white text-center font-psemibold text-lg">Next</Text>
@@ -281,7 +253,7 @@ export default function CreateProfileScreen() {
                     </View>
                 )
 
-            case 4:
+            case 3:
                 return (
                     <View className="flex-1">
                         {verificationError && (
@@ -339,7 +311,8 @@ export default function CreateProfileScreen() {
                         </TouchableOpacity>
                     </View>
                 )
-            case 5:
+
+            case 4:
                 return (
                     <View>
                         <TouchableOpacity
@@ -393,17 +366,11 @@ export default function CreateProfileScreen() {
                                 )}
                                 {step === 2 && (
                                     <>
-                                        <Text className="text-2xl font-pbold text-gray-800">Your Address</Text>
-                                        <Text className="text-base text-gray-600 font-pregular">Where can we find you?</Text>
-                                    </>
-                                )}
-                                {step === 3 && (
-                                    <>
                                         <Text className="text-2xl font-pbold text-gray-800">Personal Details</Text>
                                         <Text className="text-base text-gray-600 font-pregular">Your date of birth and NIC number</Text>
                                     </>
                                 )}
-                                {step === 4 && (
+                                {step === 3 && (
                                     <>
                                         <Text className="text-2xl font-pbold text-gray-800">Verify Identity</Text>
                                         <Text className="text-base text-gray-600 font-pregular">
@@ -411,7 +378,7 @@ export default function CreateProfileScreen() {
                                         </Text>
                                     </>
                                 )}
-                                {step === 5 && (
+                                {step === 4 && (
                                     <>
                                         <Text className="text-2xl font-pbold text-gray-800">Profile Created!</Text>
                                         <Text className="text-base text-gray-600 font-pregular mt-2 text-center">

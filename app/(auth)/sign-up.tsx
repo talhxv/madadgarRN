@@ -11,7 +11,6 @@ const SignUpScreen = () => {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [profile, setProfile] = useState({
         name: '',
-        address: '',
         password: '',
     });
     const [cameraPermission, setCameraPermission] = useState(false);
@@ -19,8 +18,6 @@ const SignUpScreen = () => {
     const [nicImage, setNicImage] = useState(null);
     const [loading, setLoading] = useState(false);
     const cameraRef = useRef(null);
-
-    // Existing AWS and Rekognition setup...
 
     const handleNICImageUpload = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -114,7 +111,21 @@ const SignUpScreen = () => {
 
     const renderProfileStep = () => (
         <View className="space-y-4">
-            {/* Your existing profile form */}
+            {/* Name Input */}
+            <TextInput
+                placeholder="Full Name"
+                value={profile.name}
+                onChangeText={(text) => setProfile({ ...profile, name: text })}
+                className="bg-white/80 rounded-xl px-4 py-3"
+            />
+
+            {/* Phone Number Input */}
+            <TextInput
+                placeholder="Phone Number"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                className="bg-white/80 rounded-xl px-4 py-3"
+            />
 
             {/* NIC Upload Button */}
             <TouchableOpacity

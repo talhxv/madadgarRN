@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
     View,
     Text,
@@ -21,9 +21,30 @@ export default function LoginScreen() {
     const [otp, setOtp] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [phoneError, setPhoneError] = useState(null);
+
+    // Create refs for OTP input fields
+    const otpInputRefs = useRef([...Array(6)].map(() => React.createRef()));
+
+    const validatePhoneNumber = (number) => {
+        const cleanNumber = number.replace(/\D/g, '');
+        // Check if the phone number has a valid format after removing the leading zero
+        const withoutLeadingZero = cleanNumber.replace(/^0+/, '');
+        // Simple validation - Pakistan mobile numbers are typically 10 digits after country code
+        return withoutLeadingZero.length >= 10;
+    };
 
     const handleSendOTP = async () => {
         try {
+            // Reset previous errors
+            setPhoneError(null);
+
+            // Validate phone number format
+            if (!validatePhoneNumber(phoneNumber)) {
+                setPhoneError("Invalid phone number");
+                return;
+            }
+
             setLoading(true);
             setError(null);
 
@@ -109,6 +130,26 @@ export default function LoginScreen() {
         }
     };
 
+    // Handle OTP input and auto-focus to next field
+    const handleOtpChange = (value, index) => {
+        const newOtp = otp.split('');
+        newOtp[index] = value;
+        setOtp(newOtp.join(''));
+
+        // Auto-focus to next field if value is entered
+        if (value && index < 5) {
+            otpInputRefs.current[index + 1].focus();
+        }
+    };
+
+    // Handle backspace in OTP fields
+    const handleOtpKeyPress = (e, index) => {
+        // If backspace is pressed and current field is empty, focus on previous field
+        if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
+            otpInputRefs.current[index - 1].focus();
+        }
+    };
+
     const renderPhoneStep = () => (
         <View className="space-y-4 mt-20">
             <View>
@@ -127,6 +168,9 @@ export default function LoginScreen() {
                         keyboardType="phone-pad"
                     />
                 </View>
+                {phoneError && (
+                    <Text className="text-red-500 mt-2 font-pregular">{phoneError}</Text>
+                )}
             </View>
 
             <TouchableOpacity
@@ -152,17 +196,15 @@ export default function LoginScreen() {
                 {[...Array(6)].map((_, index) => (
                     <TextInput
                         key={index}
+                        ref={el => otpInputRefs.current[index] = el}
                         className={`flex-1 bg-white/80 rounded-xl px-4 py-3 text-center text-lg ${
                             index !== 5 ? 'mr-3' : ''
                         }`}
                         maxLength={1}
                         keyboardType="number-pad"
                         value={otp[index] || ''}
-                        onChangeText={(value) => {
-                            const newOtp = otp.split('');
-                            newOtp[index] = value;
-                            setOtp(newOtp.join(''));
-                        }}
+                        onChangeText={(value) => handleOtpChange(value, index)}
+                        onKeyPress={(e) => handleOtpKeyPress(e, index)}
                     />
                 ))}
             </View>

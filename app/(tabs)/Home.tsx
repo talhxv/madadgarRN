@@ -1,17 +1,117 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { View, Text, TouchableOpacity, Image, Animated } from "react-native"
+import { View, Text, TouchableOpacity, Image, Animated, Alert } from "react-native"
 import { Bell, MessageCircle, Link, MapPin } from "lucide-react-native"
 import { supabase } from "@/supabaseClient"
 import { useRouter } from "expo-router"
+import { locationService, type UserLocation } from "@/lib/LocationService"
+import LocationPicker from "@/components/LocationPicker"
+import * as Location from "expo-location"
 
 export default function Home() {
     const [user, setUser] = useState<any>(null)
     const [greeting, setGreeting] = useState("")
     const [showLocationModal, setShowLocationModal] = useState(false)
+    const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
+    const [isSavingLocation, setIsSavingLocation] = useState(false)
+    const [formattedAddress, setFormattedAddress] = useState("Set your location");
     const router = useRouter()
     const scrollY = useRef(new Animated.Value(0)).current
+
+    // This function will be called when a location is selected on the map
+    const handleLocationSelected = (location: UserLocation) => {
+        console.log("Location selected:", location)
+        setUserLocation(location)
+        console.log("After setting location, userLocation state:", userLocation) // This will show the previous state due to closure
+    }
+    const updateFormattedAddress = async () => {
+        if (userLocation) {
+            const address = await getFormattedAddress(userLocation.latitude, userLocation.longitude);
+            setFormattedAddress(address);
+        }
+    };
+    // This function will save the location to Supabase when the confirm button is pressed
+    const saveLocationToDatabase = async () => {
+        try {
+            const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+
+            if (authError || !authUser) {
+                console.error("Auth error or no user:", authError);
+                Alert.alert("Error", "You need to be logged in");
+                return;
+            }
+
+            let locationToSave = userLocation;
+            if (!locationToSave) {
+                locationToSave = await locationService.getCurrentLocation();
+            }
+
+            if (!locationToSave) {
+                Alert.alert("Error", "No location selected");
+                return;
+            }
+
+            const address = await getFormattedAddress(locationToSave.latitude, locationToSave.longitude);
+            const point = `POINT(${locationToSave.longitude} ${locationToSave.latitude})`;
+
+            const { error: insertError } = await supabase.from("locations").insert({
+                user_id: authUser.id,
+                geom: point,
+                accuracy: locationToSave.accuracy || 0,
+                address
+            });
+
+            if (insertError) {
+                console.error("Error inserting location:", insertError);
+                Alert.alert("Error", "Failed to save location");
+                return;
+            }
+
+            setUserLocation(locationToSave);
+            setFormattedAddress(address);
+            Alert.alert("Success", "Your location has been updated");
+            setShowLocationModal(false);
+        } catch (error) {
+            console.error("Error in saveLocationToDatabase:", error);
+            Alert.alert("Error", "Failed to save location. Please try again.");
+        } finally {
+            setIsSavingLocation(false);
+        }
+    };
+
+    useEffect(() => {
+        console.log("userLocation state changed:", userLocation);
+        if (userLocation) {
+            updateFormattedAddress();
+        }
+    }, [userLocation]);
+
+    // Helper function to get a formatted address
+    const getFormattedAddress = async (latitude: number, longitude: number): Promise<string> => {
+        if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
+            console.error("Invalid coordinates:", { latitude, longitude });
+            return "Location unavailable";
+        }
+        try {
+            const reverseGeocode = await Location.reverseGeocodeAsync({
+                latitude,
+                longitude,
+            })
+
+            if (reverseGeocode.length > 0) {
+                const location = reverseGeocode[0]
+                return [location.name, location.street, location.city, location.region, location.postalCode, location.country]
+                    .filter(Boolean)
+                    .join(", ")
+            }
+
+            return "Location selected"
+        } catch (error) {
+            console.error("Error getting address:", error)
+            return "Location selected"
+        }
+    }
 
     useEffect(() => {
         getUser()
@@ -19,15 +119,63 @@ export default function Home() {
     }, [])
 
     const getUser = async () => {
-        const {
-            data: { user },
-        } = await supabase.auth.getUser()
-        if (user) {
-            const { data: profile } = await supabase.from("profiles").select("*").eq("user_id", user.id).single()
+        try {
+            // Get the authenticated user
+            const {
+                data: { user: authUser },
+                error: authError,
+            } = await supabase.auth.getUser();
 
-            setUser(profile)
+            if (authError) {
+                throw authError;
+            }
+
+            if (authUser) {
+                // Fetch the user's profile
+                const { data: profile, error: profileError } = await supabase
+                    .from("profiles")
+                    .select("*")
+                    .eq("user_id", authUser.id)
+                    .single();
+
+                if (profileError) {
+                    throw profileError;
+                }
+
+                setUser(profile);
+
+                // Fetch the latest location for the user
+                const { data: latestLocation, error: locationError } = await supabase
+                    .from("locations")
+                    .select("*")
+                    .eq("user_id", authUser.id)
+                    .order("updated_at", { ascending: false })
+                    .limit(1)
+                    .single();
+
+                // In the getUser function, modify the section where you set location:
+                if (locationError) {
+                    console.error("Error fetching latest location:", locationError);
+                } else if (latestLocation && latestLocation.geom && latestLocation.geom.coordinates) {
+                    // Create the location object
+                    const loadedLocation = {
+                        latitude: latestLocation.geom.coordinates[1],
+                        longitude: latestLocation.geom.coordinates[0],
+                    };
+
+                    // Set the user location
+                    setUserLocation(loadedLocation);
+
+                    // Immediately get the formatted address (don't rely only on the useEffect)
+                    getFormattedAddress(loadedLocation.latitude, loadedLocation.longitude)
+                        .then(address => setFormattedAddress(address))
+                        .catch(err => console.error("Error formatting address on load:", err));
+                }
+            }
+        } catch (error) {
+            console.error("Failed to get user data:", error);
         }
-    }
+    };
 
     const setGreetingTime = () => {
         const hour = new Date().getHours()
@@ -51,6 +199,7 @@ export default function Home() {
                     borderBottomRightRadius: 70,
                 }}
             >
+                {/* Header content remains the same */}
                 <View className="flex-row justify-between items-center">
                     <View>
                         <Text className="text-white text-lg font-semibold">{greeting},</Text>
@@ -83,34 +232,103 @@ export default function Home() {
                     <Text className="text-gray-500 text-base">Current Location</Text>
                     <View className="flex-row items-center mt-1">
                         <MapPin size={20} color="#374151" />
-                        <Text className="text-gray-800 text-lg font-semibold ml-2">{user?.address || "Set your location"}</Text>
+                        <Text className="text-gray-800 text-lg font-semibold ml-2">
+                            {formattedAddress}
+                        </Text>
                     </View>
                 </TouchableOpacity>
+
+                {/* Location Modal with fixed confirm button */}
+                {showLocationModal && (
+                    <View
+                        className="absolute top-0 left-0 right-0 bottom-0 bg-black/50 z-50 flex items-center"
+                        style={{ paddingTop: 120, paddingBottom: 80 }}
+                    >
+                        <View className="bg-white rounded-2xl w-[90%] max-w-md" style={{ height: "75%" }}>
+                            <View className="p-4 flex-1">
+                                {/* Modal Header */}
+                                <View className="flex-row justify-between items-center mb-4">
+                                    <Text className="text-xl font-bold">Set Your Location</Text>
+                                    <TouchableOpacity onPress={() => setShowLocationModal(false)}>
+                                        <Text className="text-gray-500 text-lg">Cancel</Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Location Picker */}
+                                <View className="flex-1 mb-4">
+                                    <LocationPicker
+                                        userId={user?.id}
+                                        onLocationSelected={handleLocationSelected}
+                                        initialRegion={
+                                            userLocation
+                                                ? {
+                                                    latitude: userLocation.latitude,
+                                                    longitude: userLocation.longitude,
+                                                    latitudeDelta: 0.0922,
+                                                    longitudeDelta: 0.0421,
+                                                }
+                                                : undefined
+                                        }
+                                    />
+                                </View>
+
+                                {/* Confirm Button */}
+                                <TouchableOpacity
+                                    className={`bg-[#53F3AE] py-3 rounded-xl mb-2 ${isSavingLocation ? "opacity-70" : ""}`}
+                                    onPress={saveLocationToDatabase}
+                                    disabled={isSavingLocation || !userLocation}
+                                >
+                                    <Text className="text-center font-semibold text-lg text-white">
+                                        {isSavingLocation ? "Saving..." : "Confirm Location"}
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                )}
 
                 {/* View Jobs Section */}
                 <View className="px-4">
                     <Text className="text-2xl font-bold text-gray-800">View Jobs</Text>
                     <Text className="text-gray-500 text-base mt-1 mb-4">Browse active Jobs near you</Text>
 
-                    <View className="bg-[#53F3AE]/20 p-6 rounded-3xl flex-row items-center relative">
-                        <View className="flex-1 flex-row space-x-4">
-                            <TouchableOpacity
-                                className="bg-white p-4 rounded-full items-center justify-center w-16 h-16"
-                                onPress={() => router.push("/online-jobs")}
-                            >
-                                <Link size={24} color="#53F3AE" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                className="bg-white p-4 rounded-full items-center justify-center w-16 h-16"
-                                onPress={() => router.push("/physical-jobs")}
-                            >
-                                <Image source={require("@/assets/images/physicalicon.png")} className="w-6 h-6" tintColor="#53F3AE" />
-                            </TouchableOpacity>
+                    <View className="bg-[#53F3AE] p-6 rounded-3xl relative">
+                        {/* Left section with icons - limit width to leave room for image */}
+                        <View className="w-2/3">
+                            <View className="flex-row">
+                                {/* Online icon */}
+                                <View className="items-center mr-8">
+                                    <TouchableOpacity
+                                        className="bg-white ml-4 p-4 rounded-full items-center justify-center w-16 h-16 mb-2"
+                                        onPress={() => router.push("/online-jobs")}
+                                    >
+                                        <Link size={24} color="#000000" />
+                                    </TouchableOpacity>
+                                    <Text className="text-white ml-4 font-medium">Online</Text>
+                                </View>
+
+                                {/* Physical icon */}
+                                <View className="items-center">
+                                    <TouchableOpacity
+                                        className="bg-white ml-4 p-4 rounded-full items-center justify-center w-16 h-16 mb-2"
+                                        onPress={() => router.push("/physical-jobs")}
+                                    >
+                                        <Image
+                                            source={require("@/assets/images/physicalicon.png")}
+                                            style={{ width: 32, height: 32 }}
+                                            tintColor="#000000"
+                                        />
+                                    </TouchableOpacity>
+                                    <Text className="text-white ml-4 font-medium">Physical</Text>
+                                </View>
+                            </View>
                         </View>
 
+                        {/* Person image on the right */}
                         <Image
                             source={require("@/assets/images/personstanding.png")}
-                            className="w-32 h-32 absolute right-2 bottom-0"
+                            style={{ width: 180, height: 200, right: -20 }}
+                            className="absolute bottom-0"
                             resizeMode="contain"
                         />
                     </View>
@@ -149,4 +367,3 @@ export default function Home() {
         </View>
     )
 }
-
