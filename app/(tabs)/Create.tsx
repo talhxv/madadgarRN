@@ -1,12 +1,9 @@
+// app/(tabs)/Create.js
+// This is an empty screen that won't be used but needs to exist for the tab structure
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
 
-const Create = () => {
-    return (
-        <View>
-            <Text>Layout Component</Text>
-        </View>
-    );
-};
-
-export default Create;
+export default function CreateScreen() {
+    // This screen won't actually be shown as we're intercepting the tab press
+    return <View />;
+}

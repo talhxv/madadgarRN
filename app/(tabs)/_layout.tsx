@@ -3,8 +3,11 @@ import { View } from 'react-native';
 import { Tabs } from "expo-router";
 import { Home, Search, Clock, User } from 'lucide-react-native';
 import { PlusCircle } from 'lucide-react-native';
+import { useModal } from "@/contexts/ModalContext";
 
 const TabsLayout = () => {
+    const { showCreateModal } = useModal();
+
     return (
         <Tabs
             screenOptions={{
@@ -43,11 +46,22 @@ const TabsLayout = () => {
                 name="Create"
                 options={{
                     tabBarLabel: '',
-                    tabBarIcon: ({ color }) => (
+                    tabBarIcon: () => (
                         <View className="bg-[#53F3AE] rounded-full p-3 -mt-8 shadow-lg">
                             <PlusCircle size={32} color="white" />
                         </View>
                     ),
+                    tabBarButton: (props) => (
+                        <View {...props} onTouchEnd={showCreateModal} />
+                    ),
+                }}
+                listeners={{
+                    tabPress: (e) => {
+                        // Prevent default navigation
+                        e.preventDefault();
+                        // Show modal instead
+                        showCreateModal();
+                    },
                 }}
             />
             <Tabs.Screen
@@ -73,4 +87,3 @@ const TabsLayout = () => {
 };
 
 export default TabsLayout;
-

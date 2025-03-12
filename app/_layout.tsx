@@ -3,6 +3,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts } from "expo-font";
 import { useEffect } from "react";
 import "../global.css";
+import { ModalProvider } from "@/contexts/ModalContext";
+import CreateModal from "@/components/CreateModal";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -32,8 +34,8 @@ export default function RootLayout() {
     }
 
     return (
-        <>
-            <StatusBar style="dark" />
+        <ModalProvider>
+            <StatusBar style="light" />
             <Stack screenOptions={{
                 headerShown: false,
                 gestureEnabled: true, // Enable gestures for swiping between screens
@@ -54,24 +56,12 @@ export default function RootLayout() {
                 },
             }}>
                 <Stack.Screen name="index" options={{ headerShown: false }} />
-                {/*<Stack.Screen
-                    name="create-profile"
-                    options={{
-                        headerShown: false,
-                        // Prevent going back to OTP screen
-                        gestureEnabled: false
-                    }}
-                />*/}
-               {/* <Stack.Screen
-                    name="Home"
-                    options={{
-                        headerShown: false,
-                        // Prevent going back to auth screens
-                        gestureEnabled: false
-                    }}
-                />*/}
                 <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             </Stack>
-        </>
+
+            {/* Global modal that can appear on any screen */}
+            <CreateModal />
+        </ModalProvider>
     );
 }

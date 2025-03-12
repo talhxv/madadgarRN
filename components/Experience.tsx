@@ -142,7 +142,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
             {/* Education Section */}
             <View className="mb-6">
                 <View className="flex-row justify-between items-center mb-4">
-                    <Text className="text-gray-700 font-medium text-lg">Education</Text>
+                    <Text className="text-gray-700 font-pmedium text-lg">Education</Text>
                     <TouchableOpacity
                         className="bg-[#53F3AE] p-2 rounded-full"
                         onPress={() => setIsEducationModalVisible(true)}
@@ -158,13 +158,13 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                                 <GraduationCap size={24} color="#374151" />
                             </View>
                             <View className="flex-1">
-                                <Text className="font-semibold text-gray-900">{education.institution_name}</Text>
-                                <Text className="text-gray-600">{education.degree} in {education.field_of_study}</Text>
-                                <Text className="text-gray-500 text-sm mt-1">
+                                <Text className="font-psemibold text-gray-900">{education.institution_name}</Text>
+                                <Text className="text-gray-600 font-pregular">{education.degree} in {education.field_of_study}</Text>
+                                <Text className="text-gray-500 text-sm mt-1 font-pregular">
                                     {formatDate(education.start_date)} - {education.is_current ? 'Present' : formatDate(education.end_date!)}
                                 </Text>
                                 {education.grade && (
-                                    <Text className="text-gray-500 text-sm mt-1">Grade: {education.grade}</Text>
+                                    <Text className="text-gray-500 text-sm mt-1 font-pregular">Grade: {education.grade}</Text>
                                 )}
                             </View>
                         </View>
@@ -175,7 +175,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
             {/* Experience Section */}
             <View>
                 <View className="flex-row justify-between items-center mb-4">
-                    <Text className="text-gray-700 font-medium text-lg">Experience</Text>
+                    <Text className="text-gray-700 font-pmedium text-lg">Experience</Text>
                     <TouchableOpacity
                         className="bg-[#53F3AE] p-2 rounded-full"
                         onPress={() => setIsExperienceModalVisible(true)}
@@ -191,14 +191,14 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                                 <Building2 size={24} color="#374151" />
                             </View>
                             <View className="flex-1">
-                                <Text className="font-semibold text-gray-900">{experience.position}</Text>
-                                <Text className="text-gray-600">{experience.company_name}</Text>
+                                <Text className="font-psemibold text-gray-900">{experience.position}</Text>
+                                <Text className="text-gray-600 font-pregular">{experience.company_name}</Text>
                                 <View className="flex-row items-center mt-1">
                                     <View className={`px-2 py-1 rounded-full mr-2 ${
                                         experience.type === 'online' ? 'bg-blue-100' :
                                             experience.type === 'offline' ? 'bg-green-100' : 'bg-purple-100'
                                     }`}>
-                                        <Text className={`text-xs ${
+                                        <Text className={`text-xs font-pregular ${
                                             experience.type === 'online' ? 'text-blue-800' :
                                                 experience.type === 'offline' ? 'text-green-800' : 'text-purple-800'
                                         }`}>
@@ -207,21 +207,21 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                                     </View>
                                     {experience.is_remote && (
                                         <View className="px-2 py-1 bg-gray-100 rounded-full">
-                                            <Text className="text-xs text-gray-800">Remote</Text>
+                                            <Text className="text-xs text-gray-800 font-pregular">Remote</Text>
                                         </View>
                                     )}
                                 </View>
-                                <Text className="text-gray-500 text-sm mt-1">
+                                <Text className="text-gray-500 text-sm mt-1 font-pregular">
                                     {formatDate(experience.start_date)} - {experience.is_current ? 'Present' : formatDate(experience.end_date!)}
                                 </Text>
                                 {experience.location && (
-                                    <Text className="text-gray-500 text-sm mt-1">{experience.location}</Text>
+                                    <Text className="text-gray-500 text-sm mt-1 font-pregular">{experience.location}</Text>
                                 )}
                                 {experience.skills && experience.skills.length > 0 && (
                                     <View className="flex-row flex-wrap mt-2">
                                         {experience.skills.map((skill, index) => (
                                             <View key={index} className="bg-gray-200 rounded-full px-2 py-1 mr-2 mb-2">
-                                                <Text className="text-xs text-gray-700">{skill}</Text>
+                                                <Text className="text-xs text-gray-700 font-pregular">{skill}</Text>
                                             </View>
                                         ))}
                                     </View>
@@ -247,7 +247,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                     />
                     <View className="w-11/12 bg-white rounded-2xl flex-1 mt-10 mb-10">
                         <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
-                            <Text className="text-xl font-semibold">Add Education</Text>
+                            <Text className="text-xl font-psemibold">Add Education</Text>
                             <TouchableOpacity onPress={() => setIsEducationModalVisible(false)}>
                                 <X size={24} color="#374151" />
                             </TouchableOpacity>
@@ -255,7 +255,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
 
                         <ScrollView className="p-4 flex-1">
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Institution Name *</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Institution Name *</Text>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     value={newEducation.institution_name}
@@ -265,7 +265,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Degree *</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Degree *</Text>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     value={newEducation.degree}
@@ -275,7 +275,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Field of Study *</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Field of Study *</Text>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     value={newEducation.field_of_study}
@@ -285,7 +285,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Grade</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Grade</Text>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     value={newEducation.grade}
@@ -295,7 +295,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Description</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Description</Text>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     value={newEducation.description}
@@ -307,17 +307,17 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Start Date</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Start Date</Text>
                                 <TouchableOpacity
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     onPress={() => setShowStartDatePicker(true)}
                                 >
-                                    <Text>{formatDate(newEducation.start_date!)}</Text>
+                                    <Text className="font-pregular">{formatDate(newEducation.start_date!)}</Text>
                                 </TouchableOpacity>
                             </View>
 
                             <View className="mb-4 flex-row items-center justify-between">
-                                <Text className="text-gray-700">Currently Studying</Text>
+                                <Text className="text-gray-700 font-pregular">Currently Studying</Text>
                                 <Switch
                                     value={newEducation.is_current}
                                     onValueChange={(value) => setNewEducation(prev => ({ ...prev, is_current: value }))}
@@ -326,12 +326,12 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
 
                             {!newEducation.is_current && (
                                 <View className="mb-4">
-                                    <Text className="text-gray-700 mb-1">End Date</Text>
+                                    <Text className="text-gray-700 mb-1 font-pregular">End Date</Text>
                                     <TouchableOpacity
                                         className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                         onPress={() => setShowEndDatePicker(true)}
                                     >
-                                        <Text>{newEducation.end_date ? formatDate(newEducation.end_date) : 'Select end date'}</Text>
+                                        <Text className="font-pregular">{newEducation.end_date ? formatDate(newEducation.end_date) : 'Select end date'}</Text>
                                     </TouchableOpacity>
                                 </View>
                             )}
@@ -369,7 +369,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                                 onPress={saveEducation}
                                 disabled={isSaving}
                             >
-                                <Text className="text-white font-bold text-lg">
+                                <Text className="text-white font-psemibold text-lg">
                                     {isSaving ? 'Saving...' : 'Save Education'}
                                 </Text>
                             </TouchableOpacity>
@@ -393,7 +393,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                     />
                     <View className="w-11/12 bg-white rounded-2xl flex-1 mt-10 mb-10">
                         <View className="flex-row justify-between items-center p-4 border-b border-gray-200">
-                            <Text className="text-xl font-semibold">Add Experience</Text>
+                            <Text className="text-xl font-psemibold">Add Experience</Text>
                             <TouchableOpacity onPress={() => setIsExperienceModalVisible(false)}>
                                 <X size={24} color="#374151" />
                             </TouchableOpacity>
@@ -401,7 +401,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
 
                         <ScrollView className="p-4 flex-1">
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Company Name *</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Company Name *</Text>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     value={newExperience.company_name}
@@ -411,7 +411,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Position *</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Position *</Text>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     value={newExperience.position}
@@ -421,7 +421,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Location</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Location</Text>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     value={newExperience.location}
@@ -431,7 +431,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <View className="mb-4 flex-row items-center justify-between">
-                                <Text className="text-gray-700">Remote Work</Text>
+                                <Text className="text-gray-700 font-pregular">Remote Work</Text>
                                 <Switch
                                     value={newExperience.is_remote}
                                     onValueChange={(value) => setNewExperience(prev => ({ ...prev, is_remote: value }))}
@@ -439,7 +439,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Type</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Type</Text>
                                 <View className="flex-row justify-around mt-2">
                                     {['online', 'offline', 'hybrid'].map((type) => (
                                         <TouchableOpacity
@@ -447,7 +447,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                                             className={`px-4 py-2 rounded-full ${newExperience.type === type ? 'bg-[#53F3AE]' : 'bg-gray-200'}`}
                                             onPress={() => setNewExperience(prev => ({ ...prev, type }))}
                                         >
-                                            <Text className={`${newExperience.type === type ? 'text-white' : 'text-gray-700'}`}>
+                                            <Text className={`${newExperience.type === type ? 'text-white' : 'text-gray-700'} font-pregular`}>
                                                 {type.charAt(0).toUpperCase() + type.slice(1)}
                                             </Text>
                                         </TouchableOpacity>
@@ -456,17 +456,17 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Start Date</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Start Date</Text>
                                 <TouchableOpacity
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     onPress={() => setShowStartDatePicker(true)}
                                 >
-                                    <Text>{formatDate(newExperience.start_date!)}</Text>
+                                    <Text className="font-pregular">{formatDate(newExperience.start_date!)}</Text>
                                 </TouchableOpacity>
                             </View>
 
                             <View className="mb-4 flex-row items-center justify-between">
-                                <Text className="text-gray-700">Currently Working</Text>
+                                <Text className="text-gray-700 font-pregular">Currently Working</Text>
                                 <Switch
                                     value={newExperience.is_current}
                                     onValueChange={(value) => setNewExperience(prev => ({ ...prev, is_current: value }))}
@@ -475,18 +475,18 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
 
                             {!newExperience.is_current && (
                                 <View className="mb-4">
-                                    <Text className="text-gray-700 mb-1">End Date</Text>
+                                    <Text className="text-gray-700 mb-1 font-pregular">End Date</Text>
                                     <TouchableOpacity
                                         className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                         onPress={() => setShowEndDatePicker(true)}
                                     >
-                                        <Text>{newExperience.end_date ? formatDate(newExperience.end_date) : 'Select end date'}</Text>
+                                        <Text className="font-pregular">{newExperience.end_date ? formatDate(newExperience.end_date) : 'Select end date'}</Text>
                                     </TouchableOpacity>
                                 </View>
                             )}
 
                             <View className="mb-4">
-                                <Text className="text-gray-700 mb-1">Description</Text>
+                                <Text className="text-gray-700 mb-1 font-pregular">Description</Text>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg p-3 bg-gray-50"
                                     value={newExperience.description}
@@ -502,7 +502,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                                 onPress={saveExperience}
                                 disabled={isSaving}
                             >
-                                <Text className="text-white font-bold text-lg">
+                                <Text className="text-white font-psemibold text-lg">
                                     {isSaving ? 'Saving...' : 'Save Experience'}
                                 </Text>
                             </TouchableOpacity>

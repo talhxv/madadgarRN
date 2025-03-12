@@ -251,7 +251,7 @@ export default function EditProfile() {
                     <TouchableOpacity onPress={() => router.back()}>
                         <ArrowLeft size={24} color="white" />
                     </TouchableOpacity>
-                    <Text className="text-white text-xl font-bold ml-4">Edit Profile</Text>
+                    <Text className="text-white text-xl font-psemibold ml-4">Edit Profile</Text>
                 </View>
 
                 <Animated.View
@@ -263,7 +263,7 @@ export default function EditProfile() {
                 >
                     <View className="w-24 h-24 bg-white rounded-full overflow-hidden">
                         <View className="w-full h-full bg-gray-100 items-center justify-center">
-                            <Text className="text-2xl text-gray-400">{profile.full_name?.[0] || "U"}</Text>
+                            <Text className="text-2xl text-gray-400 font-pregular">{profile.full_name?.[0] || "U"}</Text>
                         </View>
                         <TouchableOpacity
                             className="absolute bottom-0 right-0 bg-white p-1 rounded-full border border-gray-200"
@@ -273,8 +273,8 @@ export default function EditProfile() {
                         </TouchableOpacity>
                     </View>
 
-                    <Text className="text-white font-bold text-lg mt-2">{profile.full_name || "User Name"}</Text>
-                    <Text className="text-white/80">{formatPhoneNumber(profile.phone_number)}</Text>
+                    <Text className="text-white font-psemibold text-lg mt-2">{profile.full_name || "User Name"}</Text>
+                    <Text className="text-white/80 font-pregular">{formatPhoneNumber(profile.phone_number)}</Text>
                 </Animated.View>
 
                 <Animated.View
@@ -283,14 +283,14 @@ export default function EditProfile() {
                 >
                     <TouchableOpacity onPress={openModal}>
                         <View className="items-center">
-                            <Text className="text-white text-sm">Hourly Fee</Text>
-                            <Text className="text-white font-bold">{profile.hourly_fee || 0} PKR</Text>
+                            <Text className="text-white text-sm font-pregular">Hourly Fee</Text>
+                            <Text className="text-white font-psemibold">{profile.hourly_fee || 0} PKR</Text>
                         </View>
                     </TouchableOpacity>
                     <TouchableOpacity onPress={openModal}>
                         <View className="items-center">
-                            <Text className="text-white text-sm">Minimum Visit Fee</Text>
-                            <Text className="text-white font-bold">{profile.minimum_visit_fee || 0} PKR</Text>
+                            <Text className="text-white text-sm font-pregular">Minimum Visit Fee</Text>
+                            <Text className="text-white font-psemibold">{profile.minimum_visit_fee || 0} PKR</Text>
                         </View>
                     </TouchableOpacity>
                 </Animated.View>
@@ -307,7 +307,7 @@ export default function EditProfile() {
             >
                 <View className="px-4 py-6">
                     <View className="mb-4">
-                        <Text className="text-gray-700 mb-1 font-medium">Profession</Text>
+                        <Text className="text-gray-700 mb-1 font-pmedium">Profession</Text>
                         <TextInput
                             className="border border-gray-300 rounded-md px-3 py-2 bg-white"
                             value={profile.profession || ""}
@@ -317,7 +317,7 @@ export default function EditProfile() {
                     </View>
 
                     <View className="mb-6">
-                        <Text className="text-gray-700 mb-1 font-medium">Bio</Text>
+                        <Text className="text-gray-700 mb-1 font-pmedium">Bio</Text>
                         <TextInput
                             className="border border-gray-300 rounded-md px-3 py-2 bg-white h-24"
                             value={profile.bio || ""}
@@ -329,7 +329,7 @@ export default function EditProfile() {
                     </View>
 
                     <View className="mb-6">
-                        <Text className="text-gray-700 mb-1 font-medium">Skills</Text>
+                        <Text className="text-gray-700 mb-1 font-pmedium">Skills</Text>
                         <SkillSelector
                             onSkillsChange={setSelectedSkills}
                             initialSkills={profile.skills || []}
@@ -347,7 +347,7 @@ export default function EditProfile() {
                         onPress={updateProfile}
                         disabled={!isProfileChanged() || isSaving}
                     >
-                        <Text className="text-white font-bold text-lg">{isSaving ? 'Saving Changes...' : 'Save Changes'}</Text>
+                        <Text className="text-white font-psemibold text-lg">{isSaving ? 'Saving Changes...' : 'Save Changes'}</Text>
                     </TouchableOpacity>
                 </View>
             </Animated.ScrollView>
@@ -360,15 +360,15 @@ export default function EditProfile() {
             >
                 <View className="flex-1 justify-center items-center">
                     <BlurView
-                        intensity={20}m
+                        intensity={20}
                         className="absolute top-0 left-0 right-0 bottom-0"
                         tint="dark"
                     />
                     <View className="w-11/12 bg-white rounded-2xl px-6 pt-6 pb-8 items-stretch shadow-lg">
-                        <Text className="text-2xl font-semibold text-gray-900 mb-6 text-center">Set Your Fee</Text>
+                        <Text className="text-2xl font-psemibold text-gray-900 mb-6 text-center">Set Your Fee</Text>
 
                         <View className="mb-5">
-                            <Text className="text-sm font-medium text-gray-600 mb-2">Hourly Fee</Text>
+                            <Text className="text-sm font-pmedium text-gray-600 mb-2">Hourly Fee</Text>
                             <View>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg px-4 py-3 text-base bg-gray-50 text-gray-900"
@@ -381,12 +381,12 @@ export default function EditProfile() {
                                     keyboardType="numeric"
                                     placeholderTextColor="#9CA3AF"
                                 />
-                                <Text className="absolute right-4 top-3.5 text-gray-500 text-base">PKR</Text>
+                                <Text className="absolute right-4 top-3.5 text-gray-500 text-base font-pregular">PKR</Text>
                             </View>
                         </View>
 
                         <View className="mb-5">
-                            <Text className="text-sm font-medium text-gray-600 mb-2">Minimum Visit Fee</Text>
+                            <Text className="text-sm font-pmedium text-gray-600 mb-2">Minimum Visit Fee</Text>
                             <View>
                                 <TextInput
                                     className="border border-gray-300 rounded-lg px-4 py-3 text-base bg-gray-50 text-gray-900"
@@ -399,7 +399,7 @@ export default function EditProfile() {
                                     keyboardType="numeric"
                                     placeholderTextColor="#9CA3AF"
                                 />
-                                <Text className="absolute right-4 top-3.5 text-gray-500 text-base">PKR</Text>
+                                <Text className="absolute right-4 top-3.5 text-gray-500 text-base font-pregular">PKR</Text>
                             </View>
                         </View>
 
@@ -408,7 +408,7 @@ export default function EditProfile() {
                             onPress={saveFees}
                             activeOpacity={0.8}
                         >
-                            <Text className="text-white text-lg font-semibold text-center">Save Changes</Text>
+                            <Text className="text-white text-lg font-psemibold text-center">Save Changes</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

@@ -153,25 +153,59 @@ export default function Home() {
                     .limit(1)
                     .single();
 
-                // In the getUser function, modify the section where you set location:
                 if (locationError) {
                     console.error("Error fetching latest location:", locationError);
-                } else if (latestLocation && latestLocation.geom && latestLocation.geom.coordinates) {
-                    // Create the location object
-                    const loadedLocation = {
-                        latitude: latestLocation.geom.coordinates[1],
-                        longitude: latestLocation.geom.coordinates[0],
-                    };
+                } else if (latestLocation) {
+                    console.log("Latest location data:", latestLocation);
 
-                    // Set the user location
-                    setUserLocation(loadedLocation);
+                    // If we already have the address, use it directly
+                    if (latestLocation.address) {
+                        setFormattedAddress(latestLocation.address);
+                    }
 
-                    // Immediately get the formatted address (don't rely only on the useEffect)
-                    getFormattedAddress(loadedLocation.latitude, loadedLocation.longitude)
-                        .then(address => setFormattedAddress(address))
-                        .catch(err => console.error("Error formatting address on load:", err));
+                    // Try to extract coordinates from the geom field
+                    if (latestLocation.geom) {
+                        let lat, lng;
+
+                        // Handle different possible formats
+                        try {
+                            if (typeof latestLocation.geom === 'string') {
+                                // If it's a string like "POINT(lng lat)"
+                                const match = latestLocation.geom.match(/POINT\(([^ ]+) ([^)]+)\)/);
+                                if (match) {
+                                    lng = parseFloat(match[1]);
+                                    lat = parseFloat(match[2]);
+                                }
+                            } else if (latestLocation.geom.coordinates) {
+                                // If it's a GeoJSON format
+                                lng = latestLocation.geom.coordinates[0];
+                                lat = latestLocation.geom.coordinates[1];
+                            } else if (latestLocation.geom.value) {
+                                // Some PostGIS formats include a "value" property
+                                const match = latestLocation.geom.value.match(/POINT\(([^ ]+) ([^)]+)\)/);
+                                if (match) {
+                                    lng = parseFloat(match[1]);
+                                    lat = parseFloat(match[2]);
+                                }
+                            }
+
+                            if (lat && lng) {
+                                setUserLocation({ latitude: lat, longitude: lng });
+
+                                // If we don't have an address yet, get it
+                                if (!latestLocation.address) {
+                                    getFormattedAddress(lat, lng)
+                                        .then(address => setFormattedAddress(address))
+                                        .catch(err => console.error("Error formatting address:", err));
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Error parsing geom data:", error, latestLocation.geom);
+                        }
+                    }
                 }
             }
+
         } catch (error) {
             console.error("Failed to get user data:", error);
         }
@@ -202,8 +236,8 @@ export default function Home() {
                 {/* Header content remains the same */}
                 <View className="flex-row justify-between items-center">
                     <View>
-                        <Text className="text-white text-lg font-semibold">{greeting},</Text>
-                        <Text className="text-white text-3xl font-semibold flex-row items-center">
+                        <Text className="text-white text-lg font-psemibold">{greeting},</Text>
+                        <Text className="text-white text-3xl font-psemibold flex-row items-center">
                             {(user?.full_name || "User").split(" ")[0]} 👋
                         </Text>
                     </View>
@@ -229,10 +263,10 @@ export default function Home() {
             >
                 {/* Location Section */}
                 <TouchableOpacity onPress={() => setShowLocationModal(true)} className="px-4 py-6">
-                    <Text className="text-gray-500 text-base">Current Location</Text>
+                    <Text className="text-gray-500 font-pregular text-base">Current Location</Text>
                     <View className="flex-row items-center mt-1">
                         <MapPin size={20} color="#374151" />
-                        <Text className="text-gray-800 text-lg font-semibold ml-2">
+                        <Text className="text-gray-800 text-lg font-psemibold ml-2">
                             {formattedAddress}
                         </Text>
                     </View>
@@ -248,7 +282,7 @@ export default function Home() {
                             <View className="p-4 flex-1">
                                 {/* Modal Header */}
                                 <View className="flex-row justify-between items-center mb-4">
-                                    <Text className="text-xl font-bold">Set Your Location</Text>
+                                    <Text className="text-xl font-pbold">Set Your Location</Text>
                                     <TouchableOpacity onPress={() => setShowLocationModal(false)}>
                                         <Text className="text-gray-500 text-lg">Cancel</Text>
                                     </TouchableOpacity>
@@ -278,7 +312,7 @@ export default function Home() {
                                     onPress={saveLocationToDatabase}
                                     disabled={isSavingLocation || !userLocation}
                                 >
-                                    <Text className="text-center font-semibold text-lg text-white">
+                                    <Text className="text-center font-psemibold text-lg text-white">
                                         {isSavingLocation ? "Saving..." : "Confirm Location"}
                                     </Text>
                                 </TouchableOpacity>
@@ -289,8 +323,8 @@ export default function Home() {
 
                 {/* View Jobs Section */}
                 <View className="px-4">
-                    <Text className="text-2xl font-bold text-gray-800">View Jobs</Text>
-                    <Text className="text-gray-500 text-base mt-1 mb-4">Browse active Jobs near you</Text>
+                    <Text className="text-2xl font-psemibold text-gray-800">View Jobs</Text>
+                    <Text className="text-gray-500 font-pregular text-base mt-1 mb-4">Browse active Jobs near you</Text>
 
                     <View className="bg-[#53F3AE] p-6 rounded-3xl relative">
                         {/* Left section with icons - limit width to leave room for image */}
@@ -304,7 +338,7 @@ export default function Home() {
                                     >
                                         <Link size={24} color="#000000" />
                                     </TouchableOpacity>
-                                    <Text className="text-white ml-4 font-medium">Online</Text>
+                                    <Text className="text-white ml-4 font-pmedium">Online</Text>
                                 </View>
 
                                 {/* Physical icon */}
@@ -319,7 +353,7 @@ export default function Home() {
                                             tintColor="#000000"
                                         />
                                     </TouchableOpacity>
-                                    <Text className="text-white ml-4 font-medium">Physical</Text>
+                                    <Text className="text-white ml-4 font-pmedium">Physical</Text>
                                 </View>
                             </View>
                         </View>
@@ -336,12 +370,12 @@ export default function Home() {
 
                 {/* Categories Section */}
                 <View className="px-4 mb-20">
-                    <View className="flex-row justify-between items-center mb-4">
-                        <Text className="text-2xl font-bold text-gray-800">Top Categories near you</Text>
-                        <Text className="text-[#53F3AE] font-semibold">See All</Text>
+                    <View className="flex-row justify-between items-center mb-1">
+                        <Text className="text-2xl mt-2 font-psemibold text-gray-800">Top Categories near you</Text>
+                        <Text className="text-[#53F3AE] font-psemibold">See All</Text>
                     </View>
 
-                    <Text className="text-gray-600 mb-4">Find your category of service</Text>
+                    <Text className="text-gray-600 font-pregular mb-4">Find your category of service</Text>
 
                     <View className="flex-row flex-wrap justify-between gap-y-4">
                         {[
@@ -357,7 +391,7 @@ export default function Home() {
                             >
                                 <Text className="text-4xl">{category.icon}</Text>
                                 <View className="bg-white rounded-full py-2 px-4 self-start">
-                                    <Text className="text-gray-800 font-semibold">{category.title}</Text>
+                                    <Text className="text-gray-800 font-psemibold">{category.title}</Text>
                                 </View>
                             </TouchableOpacity>
                         ))}
