@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     View,
     Text,
@@ -14,8 +14,10 @@ import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
 import { router } from "expo-router";
 import { supabase } from '@/supabaseClient';
+import { useAuth } from '@/contexts/AuthContext'; // Update with the correct path
 
 export default function LoginScreen() {
+    const { user, refreshUser } = useAuth(); // Get auth context
     const [step, setStep] = useState(1); // 1: Phone, 2: OTP
     const [phoneNumber, setPhoneNumber] = useState('');
     const [otp, setOtp] = useState('');
@@ -113,6 +115,9 @@ export default function LoginScreen() {
                 .eq('phone_number', formattedPhone) // Use version without + for DB comparison
                 .single();
 
+            // Refresh the user in the auth context
+            await refreshUser();
+
             if (!existingProfile) {
                 console.log('No profile found - redirecting to create');
                 router.replace('/create-profile');
@@ -129,6 +134,7 @@ export default function LoginScreen() {
             setLoading(false);
         }
     };
+
 
     // Handle OTP input and auto-focus to next field
     const handleOtpChange = (value, index) => {
@@ -174,7 +180,7 @@ export default function LoginScreen() {
             </View>
 
             <TouchableOpacity
-                className={`bg-mdgreen rounded-xl py-4 mt-6 ${loading ? 'opacity-50' : ''}`}
+                className={`bg-[#0D9F6F] rounded-xl py-4 mt-6 ${loading ? 'opacity-50' : ''}`}
                 onPress={handleSendOTP}
                 disabled={loading}
             >
@@ -210,7 +216,7 @@ export default function LoginScreen() {
             </View>
 
             <TouchableOpacity
-                className={`bg-mdgreen rounded-xl py-4 mt-6 ${loading ? 'opacity-50' : ''}`}
+                className={`bg-[#0D9F6F] rounded-xl py-4 mt-6 ${loading ? 'opacity-50' : ''}`}
                 onPress={handleVerifyOTP}
                 disabled={loading}
             >

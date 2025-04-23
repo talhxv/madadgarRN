@@ -1,7 +1,7 @@
 "use client"
 
-import {useEffect, useState} from "react"
-import {ScrollView, Text, TouchableOpacity, View} from "react-native"
+import { useEffect, useState } from "react"
+import { ScrollView, Text, TouchableOpacity, View } from "react-native"
 import {
     Bell,
     ChevronRight,
@@ -16,8 +16,9 @@ import {
     UserCircle,
     Wallet,
 } from "lucide-react-native"
-import {supabase} from "@/supabaseClient"
-import {useRouter} from "expo-router"
+import { useRouter } from "expo-router"
+import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from "@/contexts/AuthContext" // Import the useAuth hook
 
 interface ProfileData {
     full_name: string | null
@@ -25,26 +26,8 @@ interface ProfileData {
 }
 
 export default function Profile() {
-    const [profile, setProfile] = useState<ProfileData>({
-        full_name: null,
-        phone_number: null,
-    })
+    const { user, profile } = useAuth(); // Use auth context
     const router = useRouter()
-
-    useEffect(() => {
-        getUser()
-    }, [])
-
-    const getUser = async () => {
-        const {
-            data: {user},
-        } = await supabase.auth.getUser()
-        if (user) {
-            const {data: profile} = await supabase.from("profiles").select("*").eq("user_id", user.id).single()
-
-            setProfile(profile)
-        }
-    }
 
     const formatPhoneNumber = (phoneNumber: string | null) => {
         if (!phoneNumber) return "+92 000 0000000"
@@ -122,18 +105,24 @@ export default function Profile() {
                 await supabase.auth.signOut()
                 router.replace("/login")
             },
-            style: {backgroundColor: "red"}
+            style: { backgroundColor: "red" }
         },
     ]
 
     return (
         <ScrollView className="flex-1 bg-white">
             {/* Header Section */}
-            <View className="bg-[#53F3AE] pt-12 pb-8 rounded-b-[40px]">
+            <View className="pt-12 pb-8 rounded-b-[40px] overflow-hidden">
+                <LinearGradient
+                    colors={['#0D9F6F', '#0F766E']} // From emerald to teal
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
+                />
                 {/* Rewards Points */}
                 <View className="px-4 flex-row justify-between items-center">
                     <View className="bg-white/20 px-3 py-1 rounded-full flex-row items-center">
-                        <Star size={16} color="white"/>
+                        <Star size={16} color="white" />
                         <Text className="text-white ml-1 font-pregular">Rewards {placeholderData.rewards_points} points</Text>
                     </View>
                 </View>
@@ -142,17 +131,17 @@ export default function Profile() {
                 <View className="items-center mt-6">
                     <View className="w-24 h-24 bg-white rounded-full overflow-hidden">
                         <View className="w-full h-full bg-gray-100 items-center justify-center">
-                            <Text className="text-2xl text-gray-400 font-pregular">{profile.full_name?.[0] || "U"}</Text>
+                            <Text className="text-2xl text-gray-400 font-pregular">{profile?.full_name?.[0] || "U"}</Text>
                         </View>
                     </View>
 
                     <View className="mt-2 items-center">
                         <View className="flex-row items-center">
-                            <Star size={16} color="white" fill="white"/>
+                            <Star size={16} color="white" fill="white" />
                             <Text className="text-white ml-1 font-pregular">{placeholderData.average_rating}/5</Text>
                         </View>
-                        <Text className="text-white text-2xl font-psemibold mt-2">{profile.full_name || "User Name"}</Text>
-                        <Text className="text-white/80 font-pregular">{formatPhoneNumber(profile.phone_number)}</Text>
+                        <Text className="text-white text-2xl font-psemibold mt-2">{profile?.full_name || "User Name"}</Text>
+                        <Text className="text-white/80 font-pregular">{formatPhoneNumber(profile?.phone_number)}</Text>
                     </View>
 
                     {/* Stats */}
@@ -162,8 +151,7 @@ export default function Profile() {
                             <Text className="text-white/80 text-center font-pregular">Bids{"\n"}Pending</Text>
                         </View>
                         <View className="items-center">
-                            <Text
-                                className="text-white text-2xl font-psemibold">{placeholderData.stats.jobs_completed}</Text>
+                            <Text className="text-white text-2xl font-psemibold">{placeholderData.stats.jobs_completed}</Text>
                             <Text className="text-white/80 text-center font-pregular">Jobs{"\n"}Completed</Text>
                         </View>
                         <View className="items-center">
@@ -184,10 +172,10 @@ export default function Profile() {
                     >
                         <View
                             className={`w-10 h-10 rounded-full items-center justify-center ${item.title === "Logout" ? "bg-red-300" : "bg-gray-100"}`}>
-                            <item.icon size={20} color="#374151"/>
+                            <item.icon size={20} color="#374151" />
                         </View>
                         <Text className="flex-1 ml-3 text-gray-800 font-pmedium">{item.title}</Text>
-                        <ChevronRight size={20} color="#374151"/>
+                        <ChevronRight size={20} color="#374151" />
                     </TouchableOpacity>
                 ))}
             </View>

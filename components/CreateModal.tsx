@@ -36,10 +36,26 @@ export default function CreateModal() {
         router.push("/Profile")
     }
 
-    const handleJobTypeSelection = (type) => {
-        hideCreateModal()
-        router.push(`/create/${type}`)
-    }
+    const handleJobTypeSelection = async (type) => {
+        try {
+            hideCreateModal();
+
+            // Fetch the current user
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                console.error("No user found");
+                return;
+            }
+
+            // Navigate to the job creation screen with the `user` object
+            router.push({
+                pathname: `/create/${type}`,
+                params: { user: JSON.stringify(user) }, // Pass the user object as a JSON string
+            });
+        } catch (error) {
+            console.error("Error navigating to job creation screen:", error);
+        }
+    };
 
     const closeModal = () => {
         hideCreateModal()
@@ -55,7 +71,7 @@ export default function CreateModal() {
                         </TouchableOpacity>
                         {isCheckingProfile ? (
                             <View className="py-8 justify-center items-center">
-                                <ActivityIndicator size="large" color="#53F3AE" />
+                                <ActivityIndicator size="large" color="#0D9F6F" />
                             </View>
                         ) : hasCompleteProfile ? (
                             <View>
@@ -63,13 +79,13 @@ export default function CreateModal() {
                                 <Text className="text-gray-600 mb-6 text-center font-pregular">Select the type of job you want to create</Text>
                                 <View className="flex-row justify-between gap-6">
                                     <View className="flex-1 items-center">
-                                        <TouchableOpacity className="bg-[#53F3AE] p-5 rounded-2xl mb-3 items-center justify-center" style={styles.iconButton} onPress={() => handleJobTypeSelection("online")}>
+                                        <TouchableOpacity className="bg-[#0D9F6F] p-5 rounded-2xl mb-3 items-center justify-center" style={styles.iconButton} onPress={() => handleJobTypeSelection("online")}>
                                             <Link size={32} color="white" />
                                         </TouchableOpacity>
                                         <Text className="font-psemibold mt-2 text-gray-800 text-center">Online Job</Text>
                                     </View>
                                     <View className="flex-1 items-center">
-                                        <TouchableOpacity className="bg-[#53F3AE] p-5 rounded-2xl mb-3 items-center justify-center" style={styles.iconButton} onPress={() => handleJobTypeSelection("offline")}>
+                                        <TouchableOpacity className="bg-[#0D9F6F] p-5 rounded-2xl mb-3 items-center justify-center" style={styles.iconButton} onPress={() => handleJobTypeSelection("offline")}>
                                             <Image source={require("@/assets/images/physicalicon.png")} style={{ width: 32, height: 32 }} tintColor="white" />
                                         </TouchableOpacity>
                                         <Text className="font-psemibold mt-2 text-gray-800 text-center">Offline Job</Text>
@@ -80,7 +96,7 @@ export default function CreateModal() {
                             <View>
                                 <Text className="text-2xl font-psemibold text-gray-800 mb-4 text-center">Complete Your Profile</Text>
                                 <Text className="text-gray-600 mb-6 text-center font-pregular">You need to complete your profile before you can create a job posting.</Text>
-                                <TouchableOpacity className="bg-[#53F3AE] py-4 px-6 rounded-xl" onPress={navigateToCompleteProfile}>
+                                <TouchableOpacity className="bg-[#0D9F6F] py-4 px-6 rounded-xl" onPress={navigateToCompleteProfile}>
                                     <Text className="text-center font-psemibold text-lg text-white">Complete Profile</Text>
                                 </TouchableOpacity>
                             </View>

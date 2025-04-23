@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
         top: 60,
         left: 10,
         right: 10,
-        zIndex: 10,
+        zIndex: 20,
         backgroundColor: 'white',
         borderRadius: 8,
         maxHeight: 200,

@@ -54,7 +54,7 @@ const OnboardingButton = ({ currentIndex, onboardingData, goToNextPage }) => {
                 width: buttonWidth,
                 height: 64,
                 borderRadius: borderRadius,
-                backgroundColor: '#53F3AE',
+                backgroundColor: '#0D9F6F',
                 justifyContent: 'center',
                 alignItems: 'center',
             }}

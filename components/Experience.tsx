@@ -144,7 +144,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                 <View className="flex-row justify-between items-center mb-4">
                     <Text className="text-gray-700 font-pmedium text-lg">Education</Text>
                     <TouchableOpacity
-                        className="bg-[#53F3AE] p-2 rounded-full"
+                        className="bg-[#0D9F6F] p-2 rounded-full"
                         onPress={() => setIsEducationModalVisible(true)}
                     >
                         <Plus size={20} color="white" />
@@ -177,7 +177,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                 <View className="flex-row justify-between items-center mb-4">
                     <Text className="text-gray-700 font-pmedium text-lg">Experience</Text>
                     <TouchableOpacity
-                        className="bg-[#53F3AE] p-2 rounded-full"
+                        className="bg-[#0D9F6F] p-2 rounded-full"
                         onPress={() => setIsExperienceModalVisible(true)}
                     >
                         <Plus size={20} color="white" />
@@ -365,7 +365,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             )}
 
                             <TouchableOpacity
-                                className={`py-3 rounded-lg items-center mb-4 ${isSaving ? 'bg-gray-300' : 'bg-[#53F3AE]'}`}
+                                className={`py-3 rounded-lg items-center mb-4 ${isSaving ? 'bg-gray-300' : 'bg-[#0D9F6F]'}`}
                                 onPress={saveEducation}
                                 disabled={isSaving}
                             >
@@ -444,7 +444,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                                     {['online', 'offline', 'hybrid'].map((type) => (
                                         <TouchableOpacity
                                             key={type}
-                                            className={`px-4 py-2 rounded-full ${newExperience.type === type ? 'bg-[#53F3AE]' : 'bg-gray-200'}`}
+                                            className={`px-4 py-2 rounded-full ${newExperience.type === type ? 'bg-[#0D9F6F]' : 'bg-gray-200'}`}
                                             onPress={() => setNewExperience(prev => ({ ...prev, type }))}
                                         >
                                             <Text className={`${newExperience.type === type ? 'text-white' : 'text-gray-700'} font-pregular`}>
@@ -498,7 +498,7 @@ export const EducationExperienceSection = ({ userId, educations, experiences, fe
                             </View>
 
                             <TouchableOpacity
-                                className={`py-3 rounded-lg items-center mb-4 ${isSaving ? 'bg-gray-300' : 'bg-[#53F3AE]'}`}
+                                className={`py-3 rounded-lg items-center mb-4 ${isSaving ? 'bg-gray-300' : 'bg-[#0D9F6F]'}`}
                                 onPress={saveExperience}
                                 disabled={isSaving}
                             >

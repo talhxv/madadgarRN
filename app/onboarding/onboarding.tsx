@@ -194,11 +194,11 @@ export default function OnboardingScreen() {
             <View className="absolute bottom-40 self-center flex-row">
                 {onboardingData.map((_, index) => (
                     <View
-                        key={index}
-                        className={`w-[9px] h-[9px] rounded-full mx-[3px] ${
-                            index === currentIndex ? 'bg-[#4ADE80]' : 'bg-gray-300'
-                        }`}
-                    />
+                    key={index}
+                    className={`w-[9px] h-[9px] rounded-full mx-[3px] ${
+                        index === currentIndex ? 'bg-[#0D9F6F]' : 'bg-gray-300'
+                    }`}
+                />
                 ))}
             </View>
 

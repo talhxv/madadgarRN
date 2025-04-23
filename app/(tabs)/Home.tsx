@@ -1,97 +1,303 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { View, Text, TouchableOpacity, Image, Animated, Alert } from "react-native"
-import { Bell, MessageCircle, Link, MapPin } from "lucide-react-native"
+import { View, Text, TouchableOpacity, Image, Animated, Alert, ActivityIndicator, Modal } from "react-native"
+import { Bell, MessageCircle, Link, MapPin, ChevronDown } from "lucide-react-native"
 import { supabase } from "@/supabaseClient"
 import { useRouter } from "expo-router"
 import { locationService, type UserLocation } from "@/lib/LocationService"
 import LocationPicker from "@/components/LocationPicker"
 import * as Location from "expo-location"
+import { LinearGradient } from "expo-linear-gradient"
+import { useAuth } from "@/contexts/AuthContext" // Adjust the path as needed
 
 export default function Home() {
-    const [user, setUser] = useState<any>(null)
+    const { user, profile } = useAuth()
     const [greeting, setGreeting] = useState("")
     const [showLocationModal, setShowLocationModal] = useState(false)
     const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
     const [isSavingLocation, setIsSavingLocation] = useState(false)
-    const [formattedAddress, setFormattedAddress] = useState("Set your location");
+    const [categories, setCategories] = useState<any[]>([])
+    const [isLoadingCategories, setIsLoadingCategories] = useState(true)
+    const [formattedAddress, setFormattedAddress] = useState("Set your location")
     const router = useRouter()
     const scrollY = useRef(new Animated.Value(0)).current
 
+    const headerOpacity = scrollY.interpolate({
+        inputRange: [0, 100],
+        outputRange: [1, 0.97],
+        extrapolate: "clamp",
+    })
+
+    const headerHeight = scrollY.interpolate({
+        inputRange: [0, 120],
+        outputRange: [180, 110], // Try 64 or higher for collapsed height
+        extrapolate: "clamp",
+    });
+    const headerPaddingTop = scrollY.interpolate({
+        inputRange: [0, 120],
+        outputRange: [48, 8], // Reduce to 8 or even 0
+        extrapolate: "clamp",
+    });
+    const headerPaddingBottom = scrollY.interpolate({
+        inputRange: [0, 120],
+        outputRange: [24, 8], // Reduce to 8 or even 0
+        extrapolate: "clamp",
+    });
+    const headerContentOpacity = scrollY.interpolate({
+        inputRange: [0, 60],
+        outputRange: [1, 0],
+        extrapolate: "clamp",
+    });
+
+    const addressBarTranslateY = scrollY.interpolate({
+    inputRange: [0, 120],
+    outputRange: [0, -10], 
+    extrapolate: "clamp",
+    });
     // This function will be called when a location is selected on the map
     const handleLocationSelected = (location: UserLocation) => {
         console.log("Location selected:", location)
         setUserLocation(location)
         console.log("After setting location, userLocation state:", userLocation) // This will show the previous state due to closure
     }
+
     const updateFormattedAddress = async () => {
         if (userLocation) {
-            const address = await getFormattedAddress(userLocation.latitude, userLocation.longitude);
-            setFormattedAddress(address);
+            const address = await getFormattedAddress(userLocation.latitude, userLocation.longitude)
+            setFormattedAddress(address)
         }
-    };
+    }
+
+    // Get category icon based on category name
+    const getCategoryIcon = (categoryName: string): string => {
+        const iconMap: { [key: string]: string } = {
+            // Online categories -> need to add moreeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+            "Web Development": "💻",
+            "Full Stack Development": "👨‍💻",
+            "Mobile App Development": "📱",
+            "Cloud Engineering": "☁️",
+            "Graphic Designer": "🎨",
+            "Content Writer": "✍️",
+            "Front-end Development": "🖥️",
+            "Digital Marketing": "📱",
+            "Video Editor": "🎬",
+            "Data Entry": "📊",
+            "Virtual Assistant": "📆",
+            "Social Media Manager": "📲",
+
+            // Offline/physical categories
+            Electrician: "⚡",
+            Plumber: "🔧",
+            "Interior Design": "🏠",
+            Carpenter: "🔨",
+            "House Cleaner": "🧹",
+            Gardener: "🌱",
+            Painter: "🖌️",
+            Handyman: "🛠️",
+            Mechanic: "🔩",
+            Mover: "📦",
+            "Personal Trainer": "💪",
+        }
+
+        return iconMap[categoryName] || "🔍" // Default icon if not found
+    }
+
+    // Fetch categories from Supabase
+    const fetchCategories = async () => {
+        try {
+            setIsLoadingCategories(true)
+
+            // Fetch online categories sorted by popularity
+            const { data: onlineCategories, error: onlineError } = await supabase
+                .from("job_categories")
+                .select("id, name, type, popularity_score")
+                .eq("type", "online")
+                .order("popularity_score", { ascending: false })
+                .limit(6)
+
+            if (onlineError) throw onlineError
+
+            // Fetch offline categories sorted by popularity
+            const { data: offlineCategories, error: offlineError } = await supabase
+                .from("job_categories")
+                .select("id, name, type, popularity_score")
+                .eq("type", "offline")
+                .order("popularity_score", { ascending: false })
+                .limit(6)
+
+            if (offlineError) throw offlineError
+
+            // Mix online and offline categories
+            const mixedCategories = [...onlineCategories, ...offlineCategories].sort(
+                (a, b) => b.popularity_score - a.popularity_score,
+            )
+
+            // Ensure at least one offline category
+            const hasOffline = mixedCategories.slice(0, 6).some((cat) => cat.type === "offline")
+
+            if (!hasOffline && offlineCategories.length > 0) {
+                // Find the highest ranked offline category
+                const topOffline = offlineCategories[0]
+                // Replace the lowest ranked category in the top 6 with this offline category
+                if (mixedCategories.length >= 6) {
+                    mixedCategories[5] = topOffline
+                } else {
+                    mixedCategories.push(topOffline)
+                }
+            }
+
+            // Get the top 6 categories after mixing
+            const finalCategories = mixedCategories.slice(0, 6).map((category) => ({
+                ...category,
+                icon: getCategoryIcon(category.name),
+            }))
+
+            setCategories(finalCategories)
+        } catch (error) {
+            console.error("Error fetching categories:", error)
+            // Fallback to default categories if there's an error
+            setCategories([
+                { name: "Web Developer", icon: "💻", type: "online" },
+                { name: "Electrician", icon: "⚡", type: "offline" },
+                { name: "Plumber", icon: "🔧", type: "offline" },
+                { name: "Graphic Designer", icon: "🎨", type: "online" },
+                { name: "Carpenter", icon: "🔨", type: "offline" },
+                { name: "Content Writer", icon: "✍️", type: "online" },
+            ])
+        } finally {
+            setIsLoadingCategories(false)
+        }
+    }
+
+    // New function to fetch location data
+    const fetchUserLocation = async () => {
+        try {
+            if (!user) return
+
+            // Fetch the latest location for the user
+            const { data: latestLocation, error: locationError } = await supabase
+                .from("locations")
+                .select("*")
+                .eq("user_id", user.id)
+                .order("updated_at", { ascending: false })
+                .limit(1)
+                .single()
+
+            if (locationError) {
+                console.error("Error fetching latest location:", locationError)
+            } else if (latestLocation) {
+                console.log("Latest location data:", latestLocation)
+
+                // If we already have the address, use it directly
+                if (latestLocation.address) {
+                    setFormattedAddress(latestLocation.address)
+                }
+
+                // Try to extract coordinates from the geom field
+                if (latestLocation.geom) {
+                    let lat, lng
+
+                    // Handle different possible formats
+                    try {
+                        if (typeof latestLocation.geom === "string") {
+                            // If it's a string like "POINT(lng lat)"
+                            const match = latestLocation.geom.match(/POINT\(([^ ]+) ([^)]+)\)/)
+                            if (match) {
+                                lng = Number.parseFloat(match[1])
+                                lat = Number.parseFloat(match[2])
+                            }
+                        } else if (latestLocation.geom.coordinates) {
+                            // If it's a GeoJSON format
+                            lng = latestLocation.geom.coordinates[0]
+                            lat = latestLocation.geom.coordinates[1]
+                        } else if (latestLocation.geom.value) {
+                            // Some PostGIS formats include a "value" property
+                            const match = latestLocation.geom.value.match(/POINT\(([^ ]+) ([^)]+)\)/)
+                            if (match) {
+                                lng = Number.parseFloat(match[1])
+                                lat = Number.parseFloat(match[2])
+                            }
+                        }
+
+                        if (lat && lng) {
+                            setUserLocation({ latitude: lat, longitude: lng })
+
+                            // If we don't have an address yet, get it
+                            if (!latestLocation.address) {
+                                getFormattedAddress(lat, lng)
+                                    .then((address) => setFormattedAddress(address))
+                                    .catch((err) => console.error("Error formatting address:", err))
+                            }
+                        }
+                    } catch (error) {
+                        console.error("Error parsing geom data:", error, latestLocation.geom)
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Failed to get location data:", error)
+        }
+    }
+
     // This function will save the location to Supabase when the confirm button is pressed
     const saveLocationToDatabase = async () => {
         try {
-            const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-
-            if (authError || !authUser) {
-                console.error("Auth error or no user:", authError);
-                Alert.alert("Error", "You need to be logged in");
-                return;
+            if (!user) {
+                Alert.alert("Error", "You need to be logged in")
+                return
             }
 
-            let locationToSave = userLocation;
+            let locationToSave = userLocation
             if (!locationToSave) {
-                locationToSave = await locationService.getCurrentLocation();
+                locationToSave = await locationService.getCurrentLocation()
             }
 
             if (!locationToSave) {
-                Alert.alert("Error", "No location selected");
-                return;
+                Alert.alert("Error", "No location selected")
+                return
             }
 
-            const address = await getFormattedAddress(locationToSave.latitude, locationToSave.longitude);
-            const point = `POINT(${locationToSave.longitude} ${locationToSave.latitude})`;
+            const address = await getFormattedAddress(locationToSave.latitude, locationToSave.longitude)
+            const point = `POINT(${locationToSave.longitude} ${locationToSave.latitude})`
 
             const { error: insertError } = await supabase.from("locations").insert({
-                user_id: authUser.id,
+                user_id: user.id,
                 geom: point,
                 accuracy: locationToSave.accuracy || 0,
-                address
-            });
+                address,
+            })
 
             if (insertError) {
-                console.error("Error inserting location:", insertError);
-                Alert.alert("Error", "Failed to save location");
-                return;
+                console.error("Error inserting location:", insertError)
+                Alert.alert("Error", "Failed to save location")
+                return
             }
 
-            setUserLocation(locationToSave);
-            setFormattedAddress(address);
-            Alert.alert("Success", "Your location has been updated");
-            setShowLocationModal(false);
+            setUserLocation(locationToSave)
+            setFormattedAddress(address)
+            Alert.alert("Success", "Your location has been updated")
+            setShowLocationModal(false)
         } catch (error) {
-            console.error("Error in saveLocationToDatabase:", error);
-            Alert.alert("Error", "Failed to save location. Please try again.");
+            console.error("Error in saveLocationToDatabase:", error)
+            Alert.alert("Error", "Failed to save location. Please try again.")
         } finally {
-            setIsSavingLocation(false);
+            setIsSavingLocation(false)
         }
-    };
+    }
 
     useEffect(() => {
-        console.log("userLocation state changed:", userLocation);
+        console.log("userLocation state changed:", userLocation)
         if (userLocation) {
-            updateFormattedAddress();
+            updateFormattedAddress()
         }
-    }, [userLocation]);
+    }, [userLocation])
 
     // Helper function to get a formatted address
     const getFormattedAddress = async (latitude: number, longitude: number): Promise<string> => {
         if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
-            console.error("Invalid coordinates:", { latitude, longitude });
-            return "Location unavailable";
+            console.error("Invalid coordinates:", { latitude, longitude })
+            return "Location unavailable"
         }
         try {
             const reverseGeocode = await Location.reverseGeocodeAsync({
@@ -114,102 +320,14 @@ export default function Home() {
     }
 
     useEffect(() => {
-        getUser()
         setGreetingTime()
-    }, [])
+        fetchCategories()
 
-    const getUser = async () => {
-        try {
-            // Get the authenticated user
-            const {
-                data: { user: authUser },
-                error: authError,
-            } = await supabase.auth.getUser();
-
-            if (authError) {
-                throw authError;
-            }
-
-            if (authUser) {
-                // Fetch the user's profile
-                const { data: profile, error: profileError } = await supabase
-                    .from("profiles")
-                    .select("*")
-                    .eq("user_id", authUser.id)
-                    .single();
-
-                if (profileError) {
-                    throw profileError;
-                }
-
-                setUser(profile);
-
-                // Fetch the latest location for the user
-                const { data: latestLocation, error: locationError } = await supabase
-                    .from("locations")
-                    .select("*")
-                    .eq("user_id", authUser.id)
-                    .order("updated_at", { ascending: false })
-                    .limit(1)
-                    .single();
-
-                if (locationError) {
-                    console.error("Error fetching latest location:", locationError);
-                } else if (latestLocation) {
-                    console.log("Latest location data:", latestLocation);
-
-                    // If we already have the address, use it directly
-                    if (latestLocation.address) {
-                        setFormattedAddress(latestLocation.address);
-                    }
-
-                    // Try to extract coordinates from the geom field
-                    if (latestLocation.geom) {
-                        let lat, lng;
-
-                        // Handle different possible formats
-                        try {
-                            if (typeof latestLocation.geom === 'string') {
-                                // If it's a string like "POINT(lng lat)"
-                                const match = latestLocation.geom.match(/POINT\(([^ ]+) ([^)]+)\)/);
-                                if (match) {
-                                    lng = parseFloat(match[1]);
-                                    lat = parseFloat(match[2]);
-                                }
-                            } else if (latestLocation.geom.coordinates) {
-                                // If it's a GeoJSON format
-                                lng = latestLocation.geom.coordinates[0];
-                                lat = latestLocation.geom.coordinates[1];
-                            } else if (latestLocation.geom.value) {
-                                // Some PostGIS formats include a "value" property
-                                const match = latestLocation.geom.value.match(/POINT\(([^ ]+) ([^)]+)\)/);
-                                if (match) {
-                                    lng = parseFloat(match[1]);
-                                    lat = parseFloat(match[2]);
-                                }
-                            }
-
-                            if (lat && lng) {
-                                setUserLocation({ latitude: lat, longitude: lng });
-
-                                // If we don't have an address yet, get it
-                                if (!latestLocation.address) {
-                                    getFormattedAddress(lat, lng)
-                                        .then(address => setFormattedAddress(address))
-                                        .catch(err => console.error("Error formatting address:", err));
-                                }
-                            }
-                        } catch (error) {
-                            console.error("Error parsing geom data:", error, latestLocation.geom);
-                        }
-                    }
-                }
-            }
-
-        } catch (error) {
-            console.error("Failed to get user data:", error);
+        // Call fetchUserLocation when user changes
+        if (user) {
+            fetchUserLocation()
         }
-    };
+    }, [user]) // This will run the effect when user changes
 
     const setGreetingTime = () => {
         const hour = new Date().getHours()
@@ -218,115 +336,149 @@ export default function Home() {
         else setGreeting("Good evening")
     }
 
-    const headerOpacity = scrollY.interpolate({
-        inputRange: [0, 100],
-        outputRange: [1, 0.97],
-        extrapolate: "clamp",
-    })
+    // Render skeleton loading UI for categories
+    const renderCategorySkeleton = () => {
+        // Create an array of 6 items to match the number of categories
+        return (
+            <View className="flex-row flex-wrap justify-between gap-y-4">
+                {[...Array(6)].map((_, index) => (
+                    <View
+                        key={index}
+                        className="w-[48%] aspect-square rounded-3xl bg-gray-200 p-4 justify-between overflow-hidden"
+                    >
+                        <View className="h-8 w-8 bg-gray-300 rounded-md self-end" />
+                        <View className="h-8 w-24 bg-gray-300 rounded-2xl self-start" />
+                    </View>
+                ))}
+            </View>
+        )
+    }
 
     return (
         <View className="flex-1 bg-white">
             <Animated.View
-                className="bg-[#53F3AE] pt-12 pb-4 px-4 absolute top-0 left-0 right-0 z-10"
+                className="px-4 absolute top-0 left-0 right-0 z-10"
                 style={{
-                    opacity: headerOpacity,
+                    height: headerHeight,
+                    paddingTop: headerPaddingTop,
+                    paddingBottom: headerPaddingBottom,
                     borderBottomRightRadius: 70,
+                    backgroundColor: undefined,
+                    
                 }}
             >
-                {/* Header content remains the same */}
-                <View className="flex-row justify-between items-center">
-                    <View>
-                        <Text className="text-white text-lg font-psemibold">{greeting},</Text>
-                        <Text className="text-white text-3xl font-psemibold flex-row items-center">
-                            {(user?.full_name || "User").split(" ")[0]} 👋
-                        </Text>
+                <LinearGradient
+                    colors={["#0D9F6F", "#0F766E"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderBottomRightRadius: 70 }}
+                />
+                {/* Only fade out this section */}
+                <Animated.View style={{ opacity: headerContentOpacity }}>
+                    <View className="flex-row justify-between items-center">
+                        <View>
+                            <Text className="text-white text-lg font-psemibolditalic">{greeting},</Text>
+                            <Text className="text-white text-3xl font-psemibold flex-row items-center">
+                                {(profile?.full_name || "User").split(" ")[0]} 👋
+                            </Text>
+                        </View>
+                        <View className="flex-row gap-4">
+                            <TouchableOpacity>
+                                <View className="relative">
+                                    <Bell size={24} color="white" />
+                                    <View className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" />
+                                </View>
+                            </TouchableOpacity>
+                            <TouchableOpacity>
+                                <MessageCircle size={24} color="white" />
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                    <View className="flex-row gap-4">
-                        <TouchableOpacity>
-                            <View className="relative">
-                                <Bell size={24} color="white" />
-                                <View className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" />
-                            </View>
-                        </TouchableOpacity>
-                        <TouchableOpacity>
-                            <MessageCircle size={24} color="white" />
-                        </TouchableOpacity>
-                    </View>
+                </Animated.View>
+                {/* This section is always visible */}
+                <View style={{ flex: 1, justifyContent: "flex-end" }}>
+    <Animated.View style={{ transform: [{ translateY: addressBarTranslateY }] }}>
+        <TouchableOpacity
+            onPress={() => setShowLocationModal(true)}
+            className="bg-white/20 px-4 py-2.5 rounded-full w-2/3 flex-row items-center"
+            activeOpacity={0.7}
+        >
+                        <MapPin size={18} color="white" />
+                        <View className="flex-1 ml-2 mr-1">
+                            <Text className="text-white/80 text-xs font-pmedium">Current Location</Text>
+                            <Text className="text-white font-psemibold" numberOfLines={1}>
+                                {formattedAddress}
+                            </Text>
+                        </View>
+                        <ChevronDown size={16} color="white" />
+                    </TouchableOpacity>
+                    </Animated.View>
                 </View>
             </Animated.View>
 
+            <Modal
+                visible={showLocationModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowLocationModal(false)}
+            >
+                <View className="flex-1 bg-black/50 justify-center items-center px-4">
+                    <View className="bg-white rounded-2xl w-full max-w-md" style={{ height: "75%" }}>
+                        <View className="p-4 flex-1">
+                            {/* Modal Header */}
+                            <View className="flex-row justify-between items-center mb-4">
+                                <Text className="text-xl font-pbold">Set Your Location</Text>
+                                <TouchableOpacity onPress={() => setShowLocationModal(false)}>
+                                    <Text className="text-gray-500 text-lg">Cancel</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Location Picker */}
+                            <View className="flex-1 mb-4">
+                                <LocationPicker
+                                    userId={user?.id}
+                                    onLocationSelected={handleLocationSelected}
+                                    initialRegion={
+                                        userLocation
+                                            ? {
+                                                latitude: userLocation.latitude,
+                                                longitude: userLocation.longitude,
+                                                latitudeDelta: 0.0922,
+                                                longitudeDelta: 0.0421,
+                                            }
+                                            : undefined
+                                    }
+                                />
+                            </View>
+
+                            {/* Confirm Button */}
+                            <TouchableOpacity
+                                className={`bg-[#0D9F6F] py-3 rounded-xl mb-2 ${isSavingLocation ? "opacity-70" : ""}`}
+                                onPress={saveLocationToDatabase}
+                                disabled={isSavingLocation || !userLocation}
+                            >
+                                <Text className="text-center font-psemibold text-lg text-white">
+                                    {isSavingLocation ? "Saving..." : "Confirm Location"}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Scrollable Content */}
             <Animated.ScrollView
                 className="flex-1"
-                contentContainerStyle={{ paddingTop: 100 }}
+                contentContainerStyle={{ paddingTop: 201, paddingBottom: 100 }} // Increased bottom padding
                 onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
                 scrollEventThrottle={16}
             >
-                {/* Location Section */}
-                <TouchableOpacity onPress={() => setShowLocationModal(true)} className="px-4 py-6">
-                    <Text className="text-gray-500 font-pregular text-base">Current Location</Text>
-                    <View className="flex-row items-center mt-1">
-                        <MapPin size={20} color="#374151" />
-                        <Text className="text-gray-800 text-lg font-psemibold ml-2">
-                            {formattedAddress}
-                        </Text>
-                    </View>
-                </TouchableOpacity>
-
-                {/* Location Modal with fixed confirm button */}
-                {showLocationModal && (
-                    <View
-                        className="absolute top-0 left-0 right-0 bottom-0 bg-black/50 z-50 flex items-center"
-                        style={{ paddingTop: 120, paddingBottom: 80 }}
-                    >
-                        <View className="bg-white rounded-2xl w-[90%] max-w-md" style={{ height: "75%" }}>
-                            <View className="p-4 flex-1">
-                                {/* Modal Header */}
-                                <View className="flex-row justify-between items-center mb-4">
-                                    <Text className="text-xl font-pbold">Set Your Location</Text>
-                                    <TouchableOpacity onPress={() => setShowLocationModal(false)}>
-                                        <Text className="text-gray-500 text-lg">Cancel</Text>
-                                    </TouchableOpacity>
-                                </View>
-
-                                {/* Location Picker */}
-                                <View className="flex-1 mb-4">
-                                    <LocationPicker
-                                        userId={user?.id}
-                                        onLocationSelected={handleLocationSelected}
-                                        initialRegion={
-                                            userLocation
-                                                ? {
-                                                    latitude: userLocation.latitude,
-                                                    longitude: userLocation.longitude,
-                                                    latitudeDelta: 0.0922,
-                                                    longitudeDelta: 0.0421,
-                                                }
-                                                : undefined
-                                        }
-                                    />
-                                </View>
-
-                                {/* Confirm Button */}
-                                <TouchableOpacity
-                                    className={`bg-[#53F3AE] py-3 rounded-xl mb-2 ${isSavingLocation ? "opacity-70" : ""}`}
-                                    onPress={saveLocationToDatabase}
-                                    disabled={isSavingLocation || !userLocation}
-                                >
-                                    <Text className="text-center font-psemibold text-lg text-white">
-                                        {isSavingLocation ? "Saving..." : "Confirm Location"}
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    </View>
-                )}
-
                 {/* View Jobs Section */}
                 <View className="px-4">
-                    <Text className="text-2xl font-psemibold text-gray-800">View Jobs</Text>
-                    <Text className="text-gray-500 font-pregular text-base mt-1 mb-4">Browse active Jobs near you</Text>
+                    <Text className="text-xl font-psemibold text-[#333333]">View Jobs</Text>
+                    <Text className="text-gray-500 font-pmediumitalic text-base mt-1 mb-4">Browse active Jobs near you</Text>
 
-                    <View className="bg-[#53F3AE] p-6 rounded-3xl relative">
+                    <View className="bg-[#00684A] p-5 rounded-3xl relative">
                         {/* Left section with icons - limit width to leave room for image */}
                         <View className="w-2/3">
                             <View className="flex-row">
@@ -334,7 +486,7 @@ export default function Home() {
                                 <View className="items-center mr-8">
                                     <TouchableOpacity
                                         className="bg-white ml-4 p-4 rounded-full items-center justify-center w-16 h-16 mb-2"
-                                        onPress={() => router.push("/online-jobs")}
+                                        onPress={() => router.push("/view/online-jobs")}
                                     >
                                         <Link size={24} color="#000000" />
                                     </TouchableOpacity>
@@ -345,7 +497,7 @@ export default function Home() {
                                 <View className="items-center">
                                     <TouchableOpacity
                                         className="bg-white ml-4 p-4 rounded-full items-center justify-center w-16 h-16 mb-2"
-                                        onPress={() => router.push("/physical-jobs")}
+                                        onPress={() => router.push("/view/offline-jobs")}
                                     >
                                         <Image
                                             source={require("@/assets/images/physicalicon.png")}
@@ -369,33 +521,43 @@ export default function Home() {
                 </View>
 
                 {/* Categories Section */}
-                <View className="px-4 mb-20">
+                <View className="px-4 mt-3 mb-6">
                     <View className="flex-row justify-between items-center mb-1">
-                        <Text className="text-2xl mt-2 font-psemibold text-gray-800">Top Categories near you</Text>
-                        <Text className="text-[#53F3AE] font-psemibold">See All</Text>
+                        <Text className="text-xl mt-2 font-psemibold text-[#333333]">Top Categories near you</Text>
+                        <Text className="text-[#4A90E2] font-psemibold">See All</Text>
                     </View>
 
-                    <Text className="text-gray-600 font-pregular mb-4">Find your category of service</Text>
+                    <Text className="text-gray-600 font-pmediumitalic mb-4">Find your category of service</Text>
 
-                    <View className="flex-row flex-wrap justify-between gap-y-4">
-                        {[
-                            { title: "Electrician", icon: "⚡" },
-                            { title: "Web Developer", icon: "💻" },
-                            { title: "Plumber", icon: "🔧" },
-                            { title: "Carpenter", icon: "🔨" },
-                        ].map((category, index) => (
-                            <TouchableOpacity
-                                key={index}
-                                className="w-[48%] aspect-square bg-[#53F3AE] rounded-3xl p-4 justify-between"
-                                onPress={() => router.push(`/category/${category.title.toLowerCase()}`)}
-                            >
-                                <Text className="text-4xl">{category.icon}</Text>
-                                <View className="bg-white rounded-full py-2 px-4 self-start">
-                                    <Text className="text-gray-800 font-psemibold">{category.title}</Text>
-                                </View>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                    {isLoadingCategories ? (
+                        <View>
+                            <View className="items-center mb-4">
+                                <ActivityIndicator size="large" color="#0D9F6F" />
+                            </View>
+                            {renderCategorySkeleton()}
+                        </View>
+                    ) : (
+                        <View className="flex-row flex-wrap justify-between gap-y-4">
+                            {categories.map((category, index) => (
+                                <TouchableOpacity
+                                    key={index}
+                                    className="w-[48%] aspect-square rounded-3xl p-4 justify-between overflow-hidden"
+                                    onPress={() => router.push(`/category/${category.name.toLowerCase().replace(/\s+/g, "-")}`)}
+                                >
+                                    <LinearGradient
+                                        colors={index % 2 === 0 ? ["#0D9F6F", "#0F766E"] : ["#0F766E", "#0D9F6F"]}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}
+                                    />
+                                    <Text className="text-3xl self-end text-left">{category.icon}</Text>
+                                    <View className="bg-white rounded-2xl py-1 px-3 self-start">
+                                        <Text className="text-gray-800 font-psemibold text-md">{category.name}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
                 </View>
             </Animated.ScrollView>
         </View>

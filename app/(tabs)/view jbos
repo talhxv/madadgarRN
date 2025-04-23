@@ -1,37 +1,20 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import {
     View,
     Text,
     FlatList,
     TouchableOpacity,
     Modal,
+    Image,
+    ScrollView,
     ActivityIndicator,
     Animated,
-    Alert,
-    ScrollView,
-    Image,
 } from "react-native"
-import { useNavigation } from "@react-navigation/native";
 import { supabase } from "@/lib/supabase"
 import { format } from "date-fns"
-import {
-    ArrowLeft,
-    Trash2,
-    AlertCircle,
-    Clock,
-    DollarSign,
-    X,
-    ChevronRight,
-    MapPin,
-    Award,
-    Calendar,
-    Star,
-    Banknote,
-    Wrench
-
-} from "lucide-react-native"
+import { X, Clock, DollarSign, MapPin, Award, Calendar, ArrowLeft, ChevronRight } from "lucide-react-native"
 import { useAuth } from "@/contexts/AuthContext"
 
 // Job type definition based on your schema
@@ -53,19 +36,13 @@ type Job = {
     category: { name: string } | null
 }
 
-const History = () => {
+const History = ({ navigation }) => {
     const { user } = useAuth()
     const [jobs, setJobs] = useState<Job[]>([])
     const [selectedJob, setSelectedJob] = useState<Job | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [deleteModalVisible, setDeleteModalVisible] = useState(false)
-    const [jobToDelete, setJobToDelete] = useState<Job | null>(null)
-    const [deleteLoading, setDeleteLoading] = useState(false)
-    const deleteModalAnimation = useRef(new Animated.Value(0)).current
-    const detailsModalAnimation = useRef(new Animated.Value(0)).current
-    const shimmerAnimation = useRef(new Animated.Value(0)).current
-    const navigation = useNavigation();
+    const [modalAnimation] = useState(new Animated.Value(0))
 
     useEffect(() => {
         if (user) {
@@ -77,54 +54,15 @@ const History = () => {
     }, [user])
 
     useEffect(() => {
-        if (loading) {
-            // Create a looping animation for the shimmer effect
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(shimmerAnimation, {
-                        toValue: 1,
-                        duration: 1000,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(shimmerAnimation, {
-                        toValue: 0,
-                        duration: 1000,
-                        useNativeDriver: true,
-                    }),
-                ]),
-            ).start()
-        } else {
-            shimmerAnimation.setValue(0)
-        }
-    }, [loading])
-
-    useEffect(() => {
-        if (deleteModalVisible) {
-            Animated.spring(deleteModalAnimation, {
-                toValue: 1,
-                useNativeDriver: true,
-                tension: 65,
-                friction: 7,
-            }).start()
-        } else {
-            Animated.timing(deleteModalAnimation, {
-                toValue: 0,
-                duration: 200,
-                useNativeDriver: true,
-            }).start()
-        }
-    }, [deleteModalVisible])
-
-    useEffect(() => {
         if (selectedJob) {
-            Animated.spring(detailsModalAnimation, {
+            Animated.spring(modalAnimation, {
                 toValue: 1,
                 useNativeDriver: true,
                 tension: 65,
                 friction: 7,
             }).start()
         } else {
-            Animated.timing(detailsModalAnimation, {
+            Animated.timing(modalAnimation, {
                 toValue: 0,
                 duration: 200,
                 useNativeDriver: true,
@@ -144,74 +82,21 @@ const History = () => {
             const { data, error } = await supabase
                 .from("jobs")
                 .select(`
-          *,
-          category:category_id(name)
-        `)
+                    *,
+                    category:category_id(name)
+                `)
                 .eq("user_id", user.id)
                 .order("created_at", { ascending: false })
 
             if (error) throw error
 
-            // Simulate a delay to show the skeleton loading (remove in production)
-            // setTimeout(() => {
-            //   setJobs(data || [])
-            //   setLoading(false)
-            // }, 2000)
-
             setJobs(data || [])
-            setLoading(false)
         } catch (err) {
             console.error("Error fetching jobs:", err)
             setError(err instanceof Error ? err.message : "Failed to fetch jobs")
+        } finally {
             setLoading(false)
         }
-    }
-
-    const handleDeleteJob = async () => {
-        if (!jobToDelete) return
-
-        try {
-            setDeleteLoading(true)
-
-            const { error } = await supabase
-                .from("jobs")
-                .delete()
-                .eq("id", jobToDelete.id)
-                .eq("user_id", user.id)
-                .eq("status", "open")
-
-            if (error) throw error
-
-            // Update local state to remove the deleted job
-            setJobs(jobs.filter((job) => job.id !== jobToDelete.id))
-
-            // Close modals
-            setDeleteModalVisible(false)
-            setJobToDelete(null)
-
-            // Show success message
-            Alert.alert("Success", "Job deleted successfully")
-        } catch (err) {
-            console.error("Error deleting job:", err)
-            Alert.alert("Error", "Failed to delete job. Please try again.")
-        } finally {
-            setDeleteLoading(false)
-        }
-    }
-
-    const initiateDelete = (job: Job) => {
-        if (job.status !== "open") {
-            Alert.alert("Cannot Delete", "Only jobs with 'Open' status can be deleted.", [{ text: "OK" }])
-            return
-        }
-
-        setJobToDelete(job)
-        setDeleteModalVisible(true)
-    }
-
-    const cancelDelete = () => {
-        setDeleteModalVisible(false)
-        setJobToDelete(null)
     }
 
     const getStatusColor = (status: Job["status"]) => {
@@ -258,26 +143,15 @@ const History = () => {
     }
 
     const getSkillLevelIcon = (level: Job["skill_level"]) => {
-        const starColor = "#0D9F70"; // Gold color for the stars
-        const starSize = 12; // Adjust the size as needed
-
-        const renderStars = (count: number) => (
-            <View className="flex-row mt-1">
-                {Array.from({ length: count }).map((_, index) => (
-                    <Star key={index} size={starSize} color={starColor} />
-                ))}
-            </View>
-        );
-
         switch (level) {
             case "amateur":
-                return renderStars(1);
+                return "⭐"
             case "intermediate":
-                return renderStars(2);
+                return "⭐⭐"
             case "professional":
-                return renderStars(3);
+                return "⭐⭐⭐"
             default:
-                return renderStars(1);
+                return "⭐"
         }
     }
 
@@ -285,7 +159,7 @@ const History = () => {
         return `${currency} ${amount.toFixed(0)}`
     }
 
-    const JobHistoryItem = ({ job }: { job: Job }) => (
+    const JobCard = ({ job }: { job: Job }) => (
         <TouchableOpacity
             className="bg-white rounded-2xl mb-4 overflow-hidden shadow-sm border border-gray-100"
             style={{ elevation: 2 }}
@@ -296,12 +170,23 @@ const History = () => {
                 <View className="flex-row justify-between items-start">
                     <View className="flex-1 mr-3">
                         <Text className="text-lg font-pbold text-gray-800">{job.title}</Text>
-                        {job.category?.name && (
-                            <Text className="text-sm font-pregular text-gray-500 mt-1">{job.category.name}</Text>
-                        )}
                     </View>
                     <View className={`px-3 py-1.5 rounded-full ${getStatusColor(job.status)}`}>
                         <Text className="text-xs text-white font-pmedium">{getStatusText(job.status)}</Text>
+                    </View>
+                </View>
+
+                <View className="flex-row items-center mt-3 flex-wrap">
+                    {job.category?.name && (
+                        <View className="bg-[#E7F7F1] px-3 py-1.5 rounded-full mr-2 mb-2">
+                            <Text className="text-sm font-pmedium text-[#0D9F70]">{job.category.name}</Text>
+                        </View>
+                    )}
+
+                    <View className={`px-3 py-1.5 rounded-full mr-2 mb-2 ${getSkillLevelBadge(job.skill_level)}`}>
+                        <Text className="text-sm font-pmedium capitalize">
+                            {job.skill_level} {getSkillLevelIcon(job.skill_level)}
+                        </Text>
                     </View>
                 </View>
 
@@ -309,9 +194,13 @@ const History = () => {
 
                 <View className="flex-row justify-between items-center">
                     <View className="flex-row items-center">
-                        <Banknote size={16} color="#0D9F70" />
-                        <Text className="text-gray-800 font-pmedium ml-1">
+                        <DollarSign size={16} color="#0D9F70" />
+                        <Text className="text-gray-800 font-pbold ml-1">
                             {job.currency} {job.amount}
+                            <Text className="text-gray-500 font-pregular">
+                                {" "}
+                                • {job.payment_type === "hourly" ? "Hourly" : "Project"}
+                            </Text>
                         </Text>
                     </View>
 
@@ -327,96 +216,19 @@ const History = () => {
                     <Text className="text-gray-500 text-xs font-pregular">
                         Posted {format(new Date(job.created_at), "MMM dd, yyyy")}
                     </Text>
-
-                    <View className="flex-row">
-                        {job.status === "open" && (
-                            <TouchableOpacity
-                                onPress={(e) => {
-                                    e.stopPropagation()
-                                    initiateDelete(job)
-                                }}
-                                className="bg-red-50 p-2 rounded-full mr-2"
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            >
-                                <Trash2 size={18} color="#EF4444" />
-                            </TouchableOpacity>
-                        )}
-
-                        <View className="bg-[#E7F7F1] p-2 rounded-full flex-row items-center">
-                            <Text className="text-[#0D9F70] font-pmedium mr-1 text-sm">View</Text>
-                            <ChevronRight size={16} color="#0D9F70" />
-                        </View>
+                    <View className="flex-row items-center">
+                        <Text className="text-[#0D9F70] font-pmedium mr-1">Details</Text>
+                        <ChevronRight size={16} color="#0D9F70" />
                     </View>
                 </View>
             </View>
         </TouchableOpacity>
     )
 
-    const SkeletonCard = () => {
-        const translateX = shimmerAnimation.interpolate({
-            inputRange: [0, 1],
-            outputRange: [-350, 350],
-        })
-
-        return (
-            <View className="bg-white rounded-2xl mb-4 overflow-hidden shadow-sm border border-gray-100 p-5">
-                <View style={{ overflow: "hidden", position: "relative" }}>
-                    {/* Shimmer effect overlay */}
-                    <Animated.View
-                        style={{
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: "rgba(255,255,255,0.5)",
-                            transform: [{ translateX }],
-                            zIndex: 10,
-                        }}
-                    />
-
-                    {/* Title and status */}
-                    <View className="flex-row justify-between items-start">
-                        <View className="flex-1 mr-3">
-                            <View className="h-6 bg-gray-200 rounded-md w-3/4 mb-2" />
-                            <View className="h-4 bg-gray-200 rounded-md w-1/2" />
-                        </View>
-                        <View className="h-6 bg-gray-200 rounded-full w-16" />
-                    </View>
-
-                    <View className="h-px bg-gray-100 my-3" />
-
-                    {/* Price and time */}
-                    <View className="flex-row justify-between items-center">
-                        <View className="flex-row items-center">
-                            <View className="h-5 w-5 bg-gray-200 rounded-full mr-2" />
-                            <View className="h-5 bg-gray-200 rounded-md w-20" />
-                        </View>
-
-                        <View className="flex-row items-center">
-                            <View className="h-5 w-5 bg-gray-200 rounded-full mr-2" />
-                            <View className="h-5 bg-gray-200 rounded-md w-16" />
-                        </View>
-                    </View>
-
-                    {/* Date and actions */}
-                    <View className="flex-row items-center justify-between mt-3">
-                        <View className="h-4 bg-gray-200 rounded-md w-32" />
-
-                        <View className="flex-row">
-                            <View className="h-8 w-8 bg-gray-200 rounded-full mr-2" />
-                            <View className="h-8 bg-gray-200 rounded-full w-20" />
-                        </View>
-                    </View>
-                </View>
-            </View>
-        )
-    }
-
     const JobDetailModal = () => {
         if (!selectedJob) return null
 
-        const translateY = detailsModalAnimation.interpolate({
+        const translateY = modalAnimation.interpolate({
             inputRange: [0, 1],
             outputRange: [300, 0],
         })
@@ -496,7 +308,7 @@ const History = () => {
 
                                 <View className="flex-row items-center mb-4">
                                     <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
-                                        <Banknote size={18} color="#0D9F70" />
+                                        <DollarSign size={18} color="#0D9F70" />
                                     </View>
                                     <View className="ml-3">
                                         <Text className="text-gray-500 text-xs font-pregular">Payment</Text>
@@ -533,7 +345,7 @@ const History = () => {
 
                                 <View className="flex-row items-center mb-4">
                                     <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
-                                        <Wrench size={18} color="#0D9F70" />
+                                        <Award size={18} color="#0D9F70" />
                                     </View>
                                     <View className="ml-3">
                                         <Text className="text-gray-500 text-xs font-pregular">Skill Level</Text>
@@ -560,94 +372,12 @@ const History = () => {
                         </ScrollView>
 
                         <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-4">
-                            {selectedJob.status === "open" ? (
-                                <View className="flex-row space-x-4">
-                                    <TouchableOpacity
-                                        className="flex-1 py-3.5 rounded-xl border border-gray-200 items-center"
-                                        onPress={() => setSelectedJob(null)}
-                                    >
-                                        <Text className="text-gray-700 font-pmedium">Close</Text>
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        className="flex-1 ml-2 py-3.5 rounded-xl bg-red-500 items-center"
-                                        onPress={() => {
-                                            setSelectedJob(null)
-                                            initiateDelete(selectedJob)
-                                        }}
-                                    >
-                                        <Text className="text-white font-pbold">Delete Job</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            ) : (
-                                <TouchableOpacity
-                                    className="bg-[#0D9F70] py-3.5 rounded-xl w-full items-center"
-                                    onPress={() => setSelectedJob(null)}
-                                >
-                                    <Text className="text-white font-pbold">Close</Text>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                    </Animated.View>
-                </View>
-            </Modal>
-        )
-    }
-
-    const DeleteConfirmationModal = () => {
-        if (!jobToDelete) return null
-
-        const translateY = deleteModalAnimation.interpolate({
-            inputRange: [0, 1],
-            outputRange: [300, 0],
-        })
-
-        return (
-            <Modal animationType="fade" transparent={true} visible={deleteModalVisible} onRequestClose={cancelDelete}>
-                <View className="flex-1 bg-black/60 justify-center items-center px-5">
-                    <Animated.View
-                        style={{
-                            transform: [{ translateY }],
-                            width: "100%",
-                            maxWidth: 340,
-                            borderRadius: 24,
-                            backgroundColor: "white",
-                            overflow: "hidden",
-                        }}
-                        className="shadow-xl"
-                    >
-                        <View className="p-6">
-                            <View className="items-center mb-4">
-                                <View className="w-12 h-12 rounded-full bg-red-100 items-center justify-center mb-3">
-                                    <AlertCircle size={24} color="#EF4444" />
-                                </View>
-                                <Text className="text-xl font-pbold text-gray-800 text-center">Delete Job</Text>
-                            </View>
-
-                            <Text className="text-gray-600 text-center mb-6">
-                                Are you sure you want to delete "{jobToDelete.title}"? This action cannot be undone.
-                            </Text>
-
-                            <View className="flex-row space-x-3">
-                                <TouchableOpacity
-                                    className="flex-1 py-3.5 rounded-xl border border-gray-200 items-center"
-                                    onPress={cancelDelete}
-                                >
-                                    <Text className="text-gray-700 font-pmedium">Cancel</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    className="flex-1 py-3.5 ml-2 rounded-xl bg-red-500 items-center"
-                                    onPress={handleDeleteJob}
-                                    disabled={deleteLoading}
-                                >
-                                    {deleteLoading ? (
-                                        <ActivityIndicator color="white" size="small" />
-                                    ) : (
-                                        <Text className="text-white font-pbold">Delete</Text>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
+                            <TouchableOpacity
+                                className="bg-[#0D9F70] py-3.5 rounded-xl w-full items-center"
+                                onPress={() => setSelectedJob(null)}
+                            >
+                                <Text className="text-white font-pbold">Close</Text>
+                            </TouchableOpacity>
                         </View>
                     </Animated.View>
                 </View>
@@ -657,28 +387,9 @@ const History = () => {
 
     if (loading) {
         return (
-            <View className="flex-1 bg-gray-50">
-                {/* Header */}
-                <View className="bg-[#0D9F70] pt-12 pb-6 px-4 rounded-b-3xl shadow-md">
-                    <View className="flex-row items-center justify-center relative">
-                        <TouchableOpacity
-                            onPress={() => navigation.goBack()} // Ensure this calls goBack()
-                            className="absolute left-0 p-2 rounded-full"
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                            <ArrowLeft color="white" size={24} />
-                        </TouchableOpacity>
-                        <Text className="text-white text-xl font-pbold">Job History</Text>
-                    </View>
-                </View>
-
-                <FlatList
-                    data={[1, 2, 3, 4, 5]} // Show 5 skeleton cards
-                    keyExtractor={(item) => item.toString()}
-                    renderItem={() => <SkeletonCard />}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
-                />
+            <View className="flex-1 justify-center items-center p-4">
+                <ActivityIndicator size="large" color="#0D9F70" />
+                <Text className="mt-2 text-gray-600 font-pregular">Loading your job history...</Text>
             </View>
         )
     }
@@ -702,37 +413,40 @@ const History = () => {
                 <View className="flex-row items-center justify-center relative">
                     <TouchableOpacity
                         onPress={() => navigation.goBack()}
-                        className="absolute left-0  p-2 rounded-full"
+                        className="absolute left-0 p-2 rounded-full"
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
                         <ArrowLeft color="white" size={24} />
                     </TouchableOpacity>
-                    <Text className="text-white text-xl font-pbold">Job History</Text>
+                    <Text className="text-white text-xl font-psemibold">Job History</Text>
                 </View>
-            </View>kiZJlo
+            </View>
 
             {jobs.length === 0 ? (
-                <View className="flex-1 justify-center items-center p-4">
+                <ScrollView
+                    contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 16 }}
+                >
                     <Text className="text-xl font-pbold text-gray-800 mb-2">No Jobs Found</Text>
                     <Text className="text-gray-600 text-center mb-6 pregular">
                         You haven't posted any jobs yet. When you do, they'll appear here.
                     </Text>
-                    <TouchableOpacity className="bg-[#0D9F70] px-8 py-4 rounded-xl shadow-sm">
+                    <TouchableOpacity
+                        className="bg-[#0D9F70] px-8 py-4 rounded-xl shadow-sm"
+                        onPress={() => navigation.navigate("CreateJob")}
+                    >
                         <Text className="text-white font-pbold">Create a Job</Text>
                     </TouchableOpacity>
-                </View>
+                </ScrollView>
             ) : (
                 <FlatList
                     data={jobs}
                     keyExtractor={(item) => item.id}
-                    renderItem={({ item }) => <JobHistoryItem job={item} />}
+                    renderItem={({ item }) => <JobCard job={item} />}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
                 />
             )}
-
             <JobDetailModal />
-            <DeleteConfirmationModal />
         </View>
     )
 }
