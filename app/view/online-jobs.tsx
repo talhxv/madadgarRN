@@ -12,15 +12,15 @@ import {
   Animated,
   TextInput,
   RefreshControl,
+  Alert,
+  ActivityIndicator,
 } from "react-native"
 import { supabase } from "@/lib/supabase"
 import { format } from "date-fns"
 import {
   X,
   Clock,
-  DollarSign,
   MapPin,
-  Award,
   Calendar,
   ArrowLeft,
   ChevronRight,
@@ -28,9 +28,11 @@ import {
   Briefcase,
   Star,
   Wrench,
-  Banknote
+  Banknote,
+  Trash2,
 } from "lucide-react-native"
-import { useAuth } from "@/contexts/AuthContext" // Add this import
+import { useAuth } from "@/contexts/AuthContext"
+import { MakeProposalModal } from "@/components/make-proposal-modal"
 
 // Job type definition based on your schema
 type Job = {
@@ -61,10 +63,13 @@ type Job = {
       avatar_url?: string
     } | null
   } | null
+  // New field to track if user has already made a proposal
+  hasProposal?: boolean
+  proposalId?: string
 }
 
 const ViewOnlineJobs = ({ navigation }) => {
-  const { user: currentUser } = useAuth() // Add this line to get current user from AuthContext
+  const { user: currentUser } = useAuth()
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [loading, setLoading] = useState(true)
@@ -72,6 +77,9 @@ const ViewOnlineJobs = ({ navigation }) => {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [modalAnimation] = useState(new Animated.Value(0))
+  const [showProposalModal, setShowProposalModal] = useState(false)
+  const [deletingProposal, setDeletingProposal] = useState(false)
+  const [proposalCounts, setProposalCounts] = useState<{ [jobId: string]: number }>({})
 
   // Skeleton loading array
   const skeletonArray = Array(6).fill(0)
@@ -97,10 +105,28 @@ const ViewOnlineJobs = ({ navigation }) => {
     }
   }, [selectedJob])
 
+  const fetchProposalCounts = async (jobIds: string[]) => {
+    if (jobIds.length === 0) return
+    const { data, error } = await supabase
+      .from("proposals")
+      .select("job_id", { count: "exact", head: false })
+      .in("job_id", jobIds)
+    if (error) {
+      console.error("Error fetching proposal counts:", error)
+      return
+    }
+    // Count proposals per job
+    const counts: { [jobId: string]: number } = {}
+    data.forEach((row) => {
+      counts[row.job_id] = (counts[row.job_id] || 0) + 1
+    })
+    setProposalCounts(counts)
+  }
+
   const fetchJobs = async () => {
     try {
       setLoading(true)
-  
+
       // 1. Fetch jobs with category
       const { data: jobsData, error: jobsError } = await supabase
         .from("jobs")
@@ -110,65 +136,85 @@ const ViewOnlineJobs = ({ navigation }) => {
         `)
         .eq("status", "open")
         .order("created_at", { ascending: false })
-  
+
       if (jobsError) throw jobsError
-      
+
       // Filter out current user's jobs right after fetching
-      const filteredJobs = currentUser ? jobsData.filter(job => job.user_id !== currentUser.id) : jobsData
-  
+      const filteredJobs = currentUser ? jobsData.filter((job) => job.user_id !== currentUser.id) : jobsData
+
       // 2. Get all unique user IDs from the jobs
-      const userIds = [...new Set(filteredJobs.map(job => job.user_id))]
-      
+      const userIds = [...new Set(filteredJobs.map((job) => job.user_id))]
+
       console.log("User IDs from jobs:", userIds)
-      
+
       // 3. Fetch profiles for user information
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
         .select("*")
         .in("user_id", userIds)
-  
+
       if (profilesError) throw profilesError
       console.log("Profiles fetched:", profilesData ? profilesData.length : 0)
-      
+
       // 4. Fetch extended_profiles for additional information
       const { data: extendedProfilesData, error: extendedProfilesError } = await supabase
         .from("extended_profiles")
         .select("*")
         .in("user_id", userIds)
-  
+
       if (extendedProfilesError) throw extendedProfilesError
       console.log("Extended profiles fetched:", extendedProfilesData ? extendedProfilesData.length : 0)
-  
-      // 5. Merge jobs with profile data - FIXED VERSION
-      const jobsWithProfiles = filteredJobs.map(job => {
-        const profile = profilesData?.find(p => p.user_id === job.user_id)
-        const extendedProfile = extendedProfilesData?.find(ep => ep.user_id === job.user_id)
-        
-        console.log(`Job ${job.id}:`, {
-          user_id: job.user_id,
-          has_profile: !!profile,
-          has_extended_profile: !!extendedProfile,
-          profile_name: profile?.full_name || "NO NAME",
-          extended_profession: extendedProfile?.profession || "NO PROFESSION"
-        })
-        
+
+      // 5. If user is logged in, fetch their proposals to check which jobs they've already applied to
+      let userProposals: { job_id: string; id: string }[] = []
+      if (currentUser) {
+        const { data: proposalsData, error: proposalsError } = await supabase
+          .from("proposals")
+          .select("id, job_id")
+          .eq("user_id", currentUser.id)
+
+        if (proposalsError) {
+          console.error("Error fetching user proposals:", proposalsError)
+        } else {
+          userProposals = proposalsData || []
+          console.log("User proposals fetched:", userProposals.length)
+        }
+      }
+
+      // 6. Merge jobs with profile data and proposal status
+      const jobsWithProfiles = filteredJobs.map((job) => {
+        const profile = profilesData?.find((p) => p.user_id === job.user_id)
+        const extendedProfile = extendedProfilesData?.find((ep) => ep.user_id === job.user_id)
+
+        // Check if user has already made a proposal for this job
+        const existingProposal = userProposals.find((p) => p.job_id === job.id)
+        const hasProposal = !!existingProposal
+        const proposalId = existingProposal?.id
+
         return {
           ...job,
           user_profile: {
             id: extendedProfile?.id || null,
             bio: extendedProfile?.bio || null,
             profession: extendedProfile?.profession || null,
-            user: profile ? {
-              full_name: profile.full_name || null,
-              phone_number: profile.phone_number || null,
-              is_verified: profile.is_verified || false,
-              avatar_url: null // To be added later
-            } : null
-          }
+            user: profile
+              ? {
+                  full_name: profile.full_name || null,
+                  phone_number: profile.phone_number || null,
+                  is_verified: profile.is_verified || false,
+                  avatar_url: null, // To be added later
+                }
+              : null,
+          },
+          hasProposal,
+          proposalId,
         }
       })
-  
+
       setJobs(jobsWithProfiles)
+      // Fetch proposal counts for all jobs
+      const jobIds = jobsWithProfiles.map((job) => job.id)
+      fetchProposalCounts(jobIds)
     } catch (err) {
       console.error("Error fetching jobs:", err)
       setError(err instanceof Error ? err.message : "Failed to fetch jobs")
@@ -219,28 +265,28 @@ const ViewOnlineJobs = ({ navigation }) => {
   }
 
   const getSkillLevelIcon = (level: Job["skill_level"]) => {
-          const starColor = "#0D9F70"; // Gold color for the stars
-          const starSize = 12; // Adjust the size as needed
-  
-          const renderStars = (count: number) => (
-              <View className="flex-row mt-1">
-                  {Array.from({ length: count }).map((_, index) => (
-                      <Star key={index} size={starSize} color={starColor} />
-                  ))}
-              </View>
-          );
-  
-          switch (level) {
-              case "amateur":
-                  return renderStars(1);
-              case "intermediate":
-                  return renderStars(2);
-              case "professional":
-                  return renderStars(3);
-              default:
-                  return renderStars(1);
-          }
-      }
+    const starColor = "#0D9F70" // Gold color for the stars
+    const starSize = 12 // Adjust the size as needed
+
+    const renderStars = (count: number) => (
+      <View className="flex-row mt-1">
+        {Array.from({ length: count }).map((_, index) => (
+          <Star key={index} size={starSize} color={starColor} />
+        ))}
+      </View>
+    )
+
+    switch (level) {
+      case "amateur":
+        return renderStars(1)
+      case "intermediate":
+        return renderStars(2)
+      case "professional":
+        return renderStars(3)
+      default:
+        return renderStars(1)
+    }
+  }
 
   const renderSkillStars = (level: "amateur" | "intermediate" | "professional") => {
     let count = 1
@@ -249,14 +295,7 @@ const ViewOnlineJobs = ({ navigation }) => {
     return (
       <View style={{ flexDirection: "row", alignItems: "center", marginRight: 4 }}>
         {[...Array(count)].map((_, i) => (
-          <Star
-            key={i}
-            size={14}
-            color="#fff"
-            fill="none"
-            strokeWidth={1.5}
-            style={{ marginRight: 1 }}
-          />
+          <Star key={i} size={14} color="#fff" fill="none" strokeWidth={1.5} style={{ marginRight: 1 }} />
         ))}
       </View>
     )
@@ -267,25 +306,18 @@ const ViewOnlineJobs = ({ navigation }) => {
   }
 
   const getUserName = (job: Job) => {
-    console.log("getUserName for job:", job.id, {
-      has_user_profile: !!job.user_profile,
-      has_user: !!job.user_profile?.user,
-      has_name: !!job.user_profile?.user?.full_name,
-      has_profession: !!job.user_profile?.profession
-    })
-    
     if (!job.user_profile) return "Unknown User"
-    
+
     // Try to get name from user object
     if (job.user_profile.user && job.user_profile.user.full_name) {
       return job.user_profile.user.full_name
     }
-    
+
     // Fall back to profession
     if (job.user_profile.profession) {
       return job.user_profile.profession
     }
-    
+
     // Last resort
     return "Anonymous User"
   }
@@ -300,12 +332,12 @@ const ViewOnlineJobs = ({ navigation }) => {
       }
       return fullName.substring(0, 2).toUpperCase()
     }
-    
+
     // Fall back to profession initials
     if (job.user_profile?.profession) {
       return job.user_profile.profession.substring(0, 2).toUpperCase()
     }
-    
+
     return "??"
   }
 
@@ -314,9 +346,94 @@ const ViewOnlineJobs = ({ navigation }) => {
     return job.user_profile.user.avatar_url
   }
 
+  const handleMakeOffer = () => {
+    if (!currentUser) {
+      // Handle not logged in case
+      Alert.alert("Login Required", "Please log in to make an offer")
+      return
+    }
+
+    setShowProposalModal(true)
+  }
+
+  const handleDeleteProposal = async () => {
+    if (!selectedJob || !selectedJob.proposalId || !currentUser) {
+      return
+    }
+
+    Alert.alert("Delete Proposal", "Are you sure you want to delete your proposal for this job?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setDeletingProposal(true)
+
+            // 1. Fetch the proposal to get portfolio_images
+            const { data: proposal, error: fetchError } = await supabase
+              .from("proposals")
+              .select("portfolio_images")
+              .eq("id", selectedJob.proposalId)
+              .eq("user_id", currentUser.id)
+              .single()
+
+            if (fetchError) throw fetchError
+
+            // 2. Delete images from storage if any
+            if (proposal?.portfolio_images && proposal.portfolio_images.length > 0) {
+              // Extract storage paths from public URLs
+              const paths = proposal.portfolio_images.map((url: string) => {
+                const match = url.match(/portfolio\/(.+)$/)
+                return match ? match[1] : null
+              }).filter(Boolean)
+
+              if (paths.length > 0) {
+                const { error: removeError } = await supabase.storage.from("portfolio").remove(paths)
+                if (removeError) {
+                  console.warn("Some images could not be deleted from storage:", removeError)
+                }
+              }
+            }
+
+            // 3. Delete the proposal row
+            const { error } = await supabase
+              .from("proposals")
+              .delete()
+              .eq("id", selectedJob.proposalId)
+              .eq("user_id", currentUser.id)
+
+            if (error) throw error
+
+            // Update the local state
+            setJobs((prevJobs) =>
+              prevJobs.map((job) =>
+                job.id === selectedJob.id ? { ...job, hasProposal: false, proposalId: undefined } : job,
+              ),
+            )
+
+            setSelectedJob((prev) => (prev ? { ...prev, hasProposal: false, proposalId: undefined } : null))
+
+            Alert.alert("Success", "Your proposal has been deleted successfully.")
+          } catch (error) {
+            console.error("Error deleting proposal or images:", error)
+            Alert.alert("Error", "Failed to delete your proposal. Please try again.")
+          } finally {
+            setDeletingProposal(false)
+          }
+        },
+      },
+    ])
+  }
+
   const JobCard = ({ job }: { job: Job }) => (
     <TouchableOpacity
-      className="bg-white rounded-2xl mb-4 overflow-hidden shadow-sm border border-gray-100"
+      className={`bg-white rounded-2xl mb-4 overflow-hidden shadow-sm border border-gray-100 ${
+        job.hasProposal ? "opacity-70" : ""
+      }`}
       style={{ elevation: 2 }}
       onPress={() => setSelectedJob(job)}
       activeOpacity={0.7}
@@ -326,10 +443,23 @@ const ViewOnlineJobs = ({ navigation }) => {
           <View className="flex-1 mr-3">
             <Text className="text-lg font-pbold text-gray-800">{job.title}</Text>
           </View>
-          <View className={`px-3 py-1.5 rounded-full ${getStatusColor(job.status)}`}>
-            <Text className="text-xs text-white font-pmedium">
-              {job.status === "open" ? "Open" : job.status.replace("_", " ")}
-            </Text>
+          <View className="flex-row items-center">
+            {/* Show proposal count */}
+            <View className="bg-gray-100 px-3 py-1.5 rounded-full mr-2 flex-row items-center">
+              <Text className="text-xs font-pmedium text-gray-700">
+                {proposalCounts[job.id] || 0} applied
+              </Text>
+            </View>
+            {job.hasProposal && (
+              <View className="bg-blue-100 px-3 py-1.5 rounded-full mr-2">
+                <Text className="text-xs font-pmedium text-blue-700">Applied</Text>
+              </View>
+            )}
+            <View className={`px-3 py-1.5 rounded-full ${getStatusColor(job.status)}`}>
+              <Text className="text-xs text-white font-pmedium">
+                {job.status === "open" ? "Open" : job.status.replace("_", " ")}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -478,6 +608,12 @@ const ViewOnlineJobs = ({ navigation }) => {
               </View>
 
               <View className="flex-row flex-wrap mb-5">
+                {selectedJob.hasProposal && (
+                  <View className="bg-blue-100 px-3 py-1.5 rounded-full mr-2 mb-2">
+                    <Text className="text-sm font-pmedium text-blue-700">Applied</Text>
+                  </View>
+                )}
+
                 <View className={`px-3 py-1.5 rounded-full mr-2 mb-2 ${getStatusColor(selectedJob.status)}`}>
                   <Text className="text-sm text-white font-pmedium">
                     {selectedJob.status === "open" ? "Open" : selectedJob.status.replace("_", " ")}
@@ -597,12 +733,32 @@ const ViewOnlineJobs = ({ navigation }) => {
             </ScrollView>
 
             <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-4">
-              <TouchableOpacity
-                className="bg-[#0D9F70] py-3.5 rounded-xl w-full items-center"
-                onPress={() => setSelectedJob(null)}
-              >
-                <Text className="text-white font-pbold">Close</Text>
-              </TouchableOpacity>
+              {selectedJob.hasProposal ? (
+                <View className="flex-row items-center">
+                  <TouchableOpacity className="bg-gray-300 py-3.5 rounded-xl flex-1 items-center mr-3" disabled={true}>
+                    <Text className="text-gray-700 font-pbold">Proposal Sent</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    className="bg-red-100 p-3.5 rounded-xl items-center justify-center"
+                    onPress={handleDeleteProposal}
+                    disabled={deletingProposal}
+                  >
+                    {deletingProposal ? (
+                      <ActivityIndicator size="small" color="#ef4444" />
+                    ) : (
+                      <Trash2 size={20} color="#ef4444" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  className="bg-[#0D9F70] py-3.5 rounded-xl w-full items-center"
+                  onPress={handleMakeOffer}
+                >
+                  <Text className="text-white font-pbold">Make Offer</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </Animated.View>
         </View>
@@ -633,7 +789,7 @@ const ViewOnlineJobs = ({ navigation }) => {
   return (
     <View className="flex-1 bg-gray-50">
       {/* Header */}
-        <View className="bg-[#0D9F70] pt-12 pb-6 px-4 rounded-b-3xl shadow-md">
+      <View className="bg-[#0D9F70] pt-12 pb-6 px-4 rounded-b-3xl shadow-md">
         <View className="flex-row items-center justify-center relative">
           <TouchableOpacity
             onPress={() => {
@@ -694,6 +850,22 @@ const ViewOnlineJobs = ({ navigation }) => {
       )}
 
       <JobDetailModal />
+
+      {/* Proposal Modal */}
+      {currentUser && (
+  <MakeProposalModal
+    job={selectedJob}
+    isVisible={showProposalModal}
+    onClose={() => {
+      setShowProposalModal(false)
+      // Refresh jobs to update proposal status
+      fetchJobs()
+      // Also close the job details modal so UI is always in sync
+      setSelectedJob(null)
+    }}
+    userId={currentUser.id}
+  />
+)}
     </View>
   )
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { View, Text, TouchableOpacity, Image, Animated, Alert, ActivityIndicator, Modal } from "react-native"
-import { Bell, MessageCircle, Link, MapPin, ChevronDown } from "lucide-react-native"
+import { Bell, Link, MapPin, ChevronDown } from "lucide-react-native"
 import { supabase } from "@/supabaseClient"
 import { useRouter } from "expo-router"
 import { locationService, type UserLocation } from "@/lib/LocationService"
@@ -10,6 +10,7 @@ import LocationPicker from "@/components/LocationPicker"
 import * as Location from "expo-location"
 import { LinearGradient } from "expo-linear-gradient"
 import { useAuth } from "@/contexts/AuthContext" // Adjust the path as needed
+import ChatButton from "@/components/chat-button" // Import the ChatButton component
 
 export default function Home() {
     const { user, profile } = useAuth()
@@ -202,7 +203,7 @@ export default function Home() {
                     try {
                         if (typeof latestLocation.geom === "string") {
                             // If it's a string like "POINT(lng lat)"
-                            const match = latestLocation.geom.match(/POINT\(([^ ]+) ([^)]+)\)/)
+                            const match = latestLocation.geom.match(/POINT$$([^ ]+) ([^)]+)$$/)
                             if (match) {
                                 lng = Number.parseFloat(match[1])
                                 lat = Number.parseFloat(match[2])
@@ -213,7 +214,7 @@ export default function Home() {
                             lat = latestLocation.geom.coordinates[1]
                         } else if (latestLocation.geom.value) {
                             // Some PostGIS formats include a "value" property
-                            const match = latestLocation.geom.value.match(/POINT\(([^ ]+) ([^)]+)\)/)
+                            const match = latestLocation.geom.value.match(/POINT$$([^ ]+) ([^)]+)$$/)
                             if (match) {
                                 lng = Number.parseFloat(match[1])
                                 lat = Number.parseFloat(match[2])
@@ -389,9 +390,7 @@ export default function Home() {
                                     <View className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" />
                                 </View>
                             </TouchableOpacity>
-                            <TouchableOpacity>
-                                <MessageCircle size={24} color="white" />
-                            </TouchableOpacity>
+                            <ChatButton />
                         </View>
                     </View>
                 </Animated.View>

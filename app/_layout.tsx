@@ -2,7 +2,6 @@ import {SplashScreen, Stack} from "expo-router";
 import {StatusBar} from 'expo-status-bar';
 import {useFonts} from "expo-font";
 import {useEffect} from "react";
-import { View } from 'react-native';
 import "../global.css";
 import {ModalProvider} from "@/contexts/ModalContext";
 import {AuthProvider} from "@/contexts/AuthContext"; // Import the AuthProvider
@@ -46,37 +45,35 @@ export default function RootLayout() {
 
     return (
         <AuthProvider> {/* Wrap everything with AuthProvider */}
-            <View style={{ flex: 1 }}>
-                <ModalProvider>
-                    <StatusBar style="light" />
-                    <Stack screenOptions={{
-                        headerShown: false,
-                        gestureEnabled: true, // Enable gestures for swiping between screens
-                        cardStyleInterpolator: ({current, next}: { current: any, next: any }) => {
-                            return {
-                                cardStyle: {
-                                    opacity: next
-                                        ? next.progress.interpolate({
-                                            inputRange: [0, 1],
-                                            outputRange: [1, 0],
-                                        })
-                                        : current.progress.interpolate({
-                                            inputRange: [0, 1],
-                                            outputRange: [0, 1],
-                                        }),
-                                },
-                            };
-                        },
-                    }}>
-                        <Stack.Screen name="index" options={{headerShown: false}}/>
-                        <Stack.Screen name="onboarding" options={{headerShown: false}}/>
-                        <Stack.Screen name="(tabs)" options={{headerShown: false}}/>
-                    </Stack>
+            <ModalProvider>
+                <StatusBar style="light" />
+                <Stack screenOptions={{
+                    headerShown: false,
+                    gestureEnabled: true, // Enable gestures for swiping between screens
+                    cardStyleInterpolator: ({current, next}: { current: any, next: any }) => {
+                        return {
+                            cardStyle: {
+                                opacity: next
+                                    ? next.progress.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [1, 0],
+                                    })
+                                    : current.progress.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0, 1],
+                                    }),
+                            },
+                        };
+                    },
+                }}>
+                    <Stack.Screen name="index" options={{headerShown: false}}/>
+                    <Stack.Screen name="onboarding" options={{headerShown: false}}/>
+                    <Stack.Screen name="(tabs)" options={{headerShown: false}}/>
+                </Stack>
 
-                    {/* Global modal that can appear on any screen */}
-                    <CreateModal/>
-                </ModalProvider>
-            </View>
+                {/* Global modal that can appear on any screen */}
+                <CreateModal/>
+            </ModalProvider>
         </AuthProvider>
     );
 }
