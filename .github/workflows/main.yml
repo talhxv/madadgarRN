@@ -1,4 +1,4 @@
-            - name: Rational Functional Tester - UI Test GitHub Action
+- name: Rational Functional Tester - UI Test GitHub Action
   # You may pin to the exact commit or the version.
   # uses: IBM/devopsauto-uitest-actions@5f41e8e36c09b960ec2701d231867d3155f2c672
   uses: IBM/devopsauto-uitest-actions@v1
