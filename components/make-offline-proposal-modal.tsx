@@ -13,43 +13,43 @@ import {
   Alert,
   Animated,
 } from "react-native"
-import { X, Upload, AlertCircle, Check } from "lucide-react-native"
+import { X, Upload, AlertCircle, Check, Info, MapPin } from "lucide-react-native"
 import { supabase } from "@/lib/supabase"
 import * as ImagePicker from "expo-image-picker"
-import { createChatForProposal } from "@/lib/chat-service";
+import { createChatForProposal } from "@/lib/chat-service"
 
-type Job = {
+type OfflineJob = {
   id: string
   title: string
-  payment_type: "hourly" | "project"
   amount: number
   currency: string
+  user_id: string
+  location?: string
+  professional_certification_required?: boolean // <-- add this
 }
 
-interface MakeProposalModalProps {
-  job: Job | null
+interface MakeOfflineProposalModalProps {
+  job: OfflineJob | null
   isVisible: boolean
   onClose: () => void
   userId: string
 }
 
-export const MakeProposalModal = ({ job, isVisible, onClose, userId }: MakeProposalModalProps) => {
+export const MakeOfflineProposalModal = ({ job, isVisible, onClose, userId }: MakeOfflineProposalModalProps) => {
   const [proposalText, setProposalText] = useState("")
-  const [rate, setRate] = useState("")
+  const [estimatedCost, setEstimatedCost] = useState("")
   const [hasDoneBefore, setHasDoneBefore] = useState(false)
   const [portfolioImages, setPortfolioImages] = useState<{ uri: string; name: string; type: string }[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [paymentType, setPaymentType] = useState<"hourly" | "project">("hourly")
   const [modalAnimation] = useState(new Animated.Value(0))
-
-  useEffect(() => {
-    if (job) {
-      setPaymentType(job.payment_type)
-    }
-  }, [job])
+  const [minimumVisitFee, setMinimumVisitFee] = useState<number | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [userProfile, setUserProfile] = useState<{ minimum_visit_fee: number | null } | null>(null)
 
   useEffect(() => {
     if (isVisible) {
+      fetchUserProfile()
+
       Animated.spring(modalAnimation, {
         toValue: 1,
         useNativeDriver: true,
@@ -65,7 +65,43 @@ export const MakeProposalModal = ({ job, isVisible, onClose, userId }: MakePropo
     }
   }, [isVisible])
 
-  const isExceedingBudget = job ? Number(rate) > job.amount : false
+  const fetchUserProfile = async () => {
+    setIsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from("extended_profiles")
+        .select("minimum_visit_fee")
+        .eq("user_id", userId)
+        .single()
+
+      if (error) throw error
+
+      if (data) {
+        setUserProfile(data)
+        setMinimumVisitFee(data.minimum_visit_fee)
+      }
+    } catch (error) {
+      console.error("Error fetching user profile:", error)
+      Alert.alert(
+        "Profile Error",
+        "Could not load your minimum visit fee. Please make sure you've set it in your profile.",
+        [{ text: "OK" }],
+      )
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const isExceedingBudget = job ? Number(estimatedCost) > job.amount : false
+  const isCertificationRequired = job?.professional_certification_required
+
+  const getTotalAmount = () => {
+    const baseRate = Number(estimatedCost) || 0
+    if (minimumVisitFee) {
+      return baseRate + minimumVisitFee
+    }
+    return baseRate
+  }
 
   const pickImage = async () => {
     if (portfolioImages.length >= 3) {
@@ -155,8 +191,25 @@ export const MakeProposalModal = ({ job, isVisible, onClose, userId }: MakePropo
   }
 
   const handleSubmit = async () => {
-    if (!job || !proposalText || !rate) {
+    if (!job || !proposalText || !estimatedCost) {
       Alert.alert("Missing information", "Please fill in all required fields")
+      return
+    }
+
+    if (isCertificationRequired && portfolioImages.length === 0) {
+      Alert.alert(
+        "Certification Required",
+        "You must attach your certification as an image to apply for this job."
+      )
+      return
+    }
+
+    if (!minimumVisitFee) {
+      Alert.alert(
+        "Missing Minimum Visit Fee",
+        "You need to set a minimum visit fee in your profile before submitting offline job proposals.",
+        [{ text: "OK" }],
+      )
       return
     }
 
@@ -173,77 +226,69 @@ export const MakeProposalModal = ({ job, isVisible, onClose, userId }: MakePropo
             imageUrls.push(publicUrl)
           } catch (uploadError) {
             console.error("Error uploading image:", uploadError)
-            // Continue with other images even if one fails
           }
         }
       }
 
-      // Insert proposal into database
+      // Calculate the total amount
+      const totalAmount = getTotalAmount()
+
+      // Insert into offline_proposals table
       const { data: proposal, error } = await supabase
-        .from("proposals")
+        .from("offline_proposals")
         .insert({
-          job_id: job.id,
+          offline_job_id: job.id,
           user_id: userId,
           proposal_text: proposalText,
-          rate: Number.parseFloat(rate),
-          payment_type: paymentType,
+          rate: totalAmount,
+          payment_type: "project",
           has_done_before: hasDoneBefore,
           portfolio_images: imageUrls,
           status: "pending",
           currency: job.currency,
+          minimum_visit_fee: minimumVisitFee,
+          estimated_cost: Number(estimatedCost),
+          total_amount: totalAmount,
         })
         .select("id")
-        .single();
+        .single()
 
-      if (error) throw error;
-      
+      if (error) throw error
+
       if (!proposal || !proposal.id) {
-        console.error("Proposal created but no ID returned");
-        throw new Error("Proposal created but no ID returned");
+        console.error("Proposal created but no ID returned")
+        throw new Error("Proposal created but no ID returned")
       }
 
-      console.log("Proposal created successfully:", proposal);
-
-      // Create a chat for this proposal
+      // Optionally: create chat, etc.
       try {
-        console.log("Creating chat for proposal:", {
-          proposalId: proposal.id,
-          jobId: job.id,
-          jobOwnerId: job.user_id,
-          proposalOwnerId: userId
-        });
-
         const chatResult = await createChatForProposal(
-          job.id, 
-          proposal.id, 
-          job.user_id, 
-          userId
+          job.id,            // offlineJobId (the id from offline_jobs)
+          proposal.id,       // offlineProposalId (the id from offline_proposals)
+          "offline",         // jobType
+          job.user_id,       // jobOwnerId
+          userId             // proposalOwnerId
         );
-        
-        console.log("Chat creation result:", chatResult);
-        
-        Alert.alert(
-          "Success", 
-          "Your proposal has been submitted successfully!", 
-          [{ text: "OK", onPress: onClose }]
-        );
+        console.log("Chat creation result:", chatResult)
+        Alert.alert("Success", "Your offline proposal has been submitted successfully!", [
+          { text: "OK", onPress: onClose },
+        ])
       } catch (chatError) {
-        console.error("Error creating chat:", chatError);
-        // Still show success for proposal, but mention chat issue
+        console.error("Error creating chat:", chatError)
         Alert.alert(
-          "Proposal Submitted", 
+          "Proposal Submitted",
           "Your proposal was submitted, but there was an issue setting up the chat. You may need to refresh the app.",
-          [{ text: "OK", onPress: onClose }]
-        );
+          [{ text: "OK", onPress: onClose }],
+        )
       }
 
       // Reset form and close modal
       setProposalText("")
-      setRate("")
+      setEstimatedCost("")
       setHasDoneBefore(false)
       setPortfolioImages([])
     } catch (error) {
-      console.error("Error submitting proposal:", error)
+      console.error("Error submitting offline proposal:", error)
       Alert.alert("Error", "Failed to submit your proposal. Please try again.")
     } finally {
       setIsSubmitting(false)
@@ -273,7 +318,7 @@ export const MakeProposalModal = ({ job, isVisible, onClose, userId }: MakePropo
           <View className="w-12 h-1.5 bg-gray-300 rounded-full self-center my-3" />
 
           <View className="flex-row justify-between items-center px-6 py-3 border-b border-gray-100">
-            <Text className="text-xl font-pbold text-gray-800">Make an Offer</Text>
+            <Text className="text-xl font-pbold text-gray-800">Make an Offline Offer</Text>
             <TouchableOpacity
               onPress={onClose}
               className="p-2 rounded-full bg-gray-100"
@@ -287,6 +332,17 @@ export const MakeProposalModal = ({ job, isVisible, onClose, userId }: MakePropo
             <View className="mb-4 mt-4">
               <Text className="text-sm font-pmedium text-gray-500 mb-1">Job</Text>
               <Text className="font-pbold text-gray-800">{job.title}</Text>
+              <View className="mt-1 flex-row items-center">
+                <View className="px-2 py-1 bg-blue-50 rounded-md self-start">
+                  <Text className="text-xs font-pmedium text-blue-600">Offline Job</Text>
+                </View>
+                {job.location && (
+                  <View className="flex-row items-center ml-2">
+                    <MapPin size={14} color="#666" />
+                    <Text className="text-xs text-gray-600 ml-1">{job.location}</Text>
+                  </View>
+                )}
+              </View>
             </View>
 
             <View className="mb-4">
@@ -302,71 +358,80 @@ export const MakeProposalModal = ({ job, isVisible, onClose, userId }: MakePropo
             </View>
 
             <View className="mb-4">
-              <Text className="text-sm font-pmedium text-gray-700 mb-2">Payment Type</Text>
-              <View className="flex-row">
-                <TouchableOpacity
-                  className={`flex-row items-center mr-6 p-2 rounded-lg ${
-                    paymentType === "hourly" ? "bg-[#E7F7F1]" : "bg-transparent"
-                  }`}
-                  onPress={() => {}}
-                  disabled={job?.payment_type !== "hourly"}
-                  style={job?.payment_type !== "hourly" ? { opacity: 0.5 } : {}}
-                >
-                  <View
-                    className={`w-5 h-5 rounded-full mr-2 items-center justify-center ${
-                      paymentType === "hourly" ? "bg-[#0D9F70]" : "border border-gray-300"
-                    }`}
-                  >
-                    {paymentType === "hourly" && <Check size={12} color="#fff" />}
-                  </View>
-                  <Text className={`font-pmedium ${paymentType === "hourly" ? "text-[#0D9F70]" : "text-gray-700"}`}>
-                    Hourly Rate
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  className={`flex-row items-center p-2 rounded-lg ${
-                    paymentType === "project" ? "bg-[#E7F7F1]" : "bg-transparent"
-                  }`}
-                  onPress={() => {}}
-                  disabled={job?.payment_type !== "project"}
-                  style={job?.payment_type !== "project" ? { opacity: 0.5 } : {}}
-                >
-                  <View
-                    className={`w-5 h-5 rounded-full mr-2 items-center justify-center ${
-                      paymentType === "project" ? "bg-[#0D9F70]" : "border border-gray-300"
-                    }`}
-                  >
-                    {paymentType === "project" && <Check size={12} color="#fff" />}
-                  </View>
-                  <Text className={`font-pmedium ${paymentType === "project" ? "text-[#0D9F70]" : "text-gray-700"}`}>
-                    Project Rate
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View className="mb-4">
-              <Text className="text-sm font-pmedium text-gray-700 mb-2">
-                {paymentType === "hourly" ? "Hourly Rate" : "Project Rate"} ({job.currency})
-              </Text>
+              <Text className="text-sm font-pmedium text-gray-700 mb-2">Estimated Costs ({job.currency})</Text>
               <TextInput
-                placeholder={`Enter your ${paymentType === "hourly" ? "hourly" : "project"} rate`}
+                placeholder="Enter your estimated costs"
                 className="bg-gray-50 rounded-xl p-4 border border-gray-200 text-gray-800"
                 keyboardType="numeric"
-                value={rate}
-                onChangeText={setRate}
+                value={estimatedCost}
+                onChangeText={setEstimatedCost}
               />
 
               {isExceedingBudget && (
                 <View className="flex-row items-center mt-2">
                   <AlertCircle size={16} color="#f59e0b" />
                   <Text className="text-amber-600 text-sm ml-1">
-                  Rate exceeds client's expected budget ({job.currency} {job.amount})
+                    Your estimate exceeds the client's budget ({job.currency} {job.amount})
                   </Text>
                 </View>
               )}
             </View>
+
+            {isLoading ? (
+              <View className="mb-4 p-4 items-center">
+                <ActivityIndicator color="#0D9F70" size="small" />
+                <Text className="text-gray-600 mt-2">Loading your profile...</Text>
+              </View>
+            ) : minimumVisitFee !== null ? (
+              <View className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                <View className="flex-row items-center mb-2">
+                  <Info size={16} color="#0D9F70" />
+                  <Text className="text-gray-700 font-pmedium ml-2">Minimum Visit Fee</Text>
+                </View>
+                <Text className="text-gray-600 text-sm">
+                  A minimum visit fee of {job.currency} {minimumVisitFee} will be added to your proposal.
+                </Text>
+                <View className="mt-3 pt-3 border-t border-gray-200">
+                  <View className="flex-row justify-between">
+                    <Text className="text-gray-600">Estimated Costs:</Text>
+                    <Text className="text-gray-600">
+                      {job.currency} {Number(estimatedCost) || 0}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between mt-1">
+                    <Text className="text-gray-600">Minimum Visit Fee:</Text>
+                    <Text className="text-gray-600">
+                      {job.currency} {minimumVisitFee}
+                    </Text>
+                  </View>
+                  <View className="flex-row justify-between mt-2 pt-2 border-t border-gray-200">
+                    <Text className="font-pbold text-gray-800">Total:</Text>
+                    <Text className="font-pbold text-gray-800">
+                      {job.currency} {getTotalAmount()}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
+                <View className="flex-row items-center">
+                  <AlertCircle size={16} color="#f59e0b" />
+                  <Text className="text-amber-700 font-pmedium ml-2">Missing Minimum Visit Fee</Text>
+                </View>
+                <Text className="text-amber-600 text-sm mt-1">
+                  You need to set a minimum visit fee in your profile before submitting offline job proposals.
+                </Text>
+              </View>
+            )}
+
+            {isCertificationRequired && (
+              <View className="mb-2 p-3 bg-blue-50 rounded-xl border border-blue-200 flex-row items-center">
+                <Info size={16} color="#0D9F70" />
+                <Text className="ml-2 text-blue-800 font-pmedium">
+                  Attach your professional certification in the images (mandatory)
+                </Text>
+              </View>
+            )}
 
             <View className="mb-4">
               <TouchableOpacity className="flex-row items-center" onPress={() => setHasDoneBefore(!hasDoneBefore)}>
@@ -417,15 +482,17 @@ export const MakeProposalModal = ({ job, isVisible, onClose, userId }: MakePropo
           <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-4">
             <TouchableOpacity
               className={`py-3.5 rounded-xl w-full items-center ${
-                isSubmitting || !proposalText || !rate ? "bg-gray-300" : "bg-[#0D9F70]"
+                isSubmitting || !proposalText || !estimatedCost || minimumVisitFee === null
+                  ? "bg-gray-300"
+                  : "bg-[#0D9F70]"
               }`}
               onPress={handleSubmit}
-              disabled={isSubmitting || !proposalText || !rate}
+              disabled={isSubmitting || !proposalText || !estimatedCost || minimumVisitFee === null}
             >
               {isSubmitting ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text className="text-white font-pbold">Send Proposal</Text>
+                <Text className="text-white font-pbold">Send Offline Proposal</Text>
               )}
             </TouchableOpacity>
           </View>

@@ -4,22 +4,25 @@ import { useState, useEffect } from "react"
 import { View, Text, FlatList, TouchableOpacity, RefreshControl } from "react-native"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/contexts/AuthContext"
-import { ArrowLeft, MessageSquare, Clock, CheckCircle2 } from "lucide-react-native"
+import { ArrowLeft, MessageSquare, Clock, CheckCircle2, ArrowUpRight, ArrowDownLeft } from "lucide-react-native"
 import { format, isToday, isYesterday, isThisYear } from "date-fns"
 import { useRouter } from "expo-router"
 import { ChatListSkeleton } from "@/components/chats/chat-list-skeleton"
 
 type Chat = {
   id: string
-  job_id: string
-  proposal_id: string
+  job_id: string | null
+  proposal_id: string | null
+  offline_job_id?: string | null
+  offline_proposal_id?: string | null
   job_owner_id: string
   proposal_owner_id: string
   created_at: string
   is_active: boolean
-  job: {
-    title: string
-  }
+  job?: { title: string; status?: string } | null
+  proposal?: { id: string; status: string; created_at: string } | null
+  offline_job?: { title: string; status?: string } | null
+  offline_proposal?: { id: string; status: string; created_at: string } | null
   other_user: {
     full_name?: string
     user_id: string
@@ -31,11 +34,6 @@ type Chat = {
     is_system?: boolean
   }
   unread_count: number
-  proposal?: {
-    id: string
-    status: string
-    created_at: string
-  }
 }
 
 type TabType = "all" | "active" | "pending"
@@ -102,12 +100,17 @@ export default function ChatListScreen() {
         .from("chats")
         .select(`
           *,
-          job:job_id(title),
-          proposal:proposal_id(id, status, created_at)
+          job:job_id(title, status),
+          proposal:proposal_id(id, status, created_at),
+          offline_job:offline_job_id(title, status),
+          offline_proposal:offline_proposal_id(id, status, created_at)
         `)
         .or(`job_owner_id.eq.${user.id},proposal_owner_id.eq.${user.id}`)
 
       if (error) throw error
+
+      // Debug by logging total chats found initially
+      console.log(`Found ${data?.length || 0} chats before filtering`)
 
       // For each chat, fetch the other user's details
       const enhancedChats = await Promise.all(
@@ -174,10 +177,11 @@ export default function ChatListScreen() {
       // Filter out chats that should not be visible to the proposal owner
       const visibleChats = enhancedChats.filter((chat) => {
         // Job owners can see all chats
-        if (chat.job_owner_id === user.id) return true
-
-        // Proposal owners can only see active chats
-        return chat.is_active
+        const isVisible = chat.job_owner_id === user.id || chat.is_active
+        if (!isVisible) {
+          console.log(`Filtering out chat ${chat.id} - job owner: ${chat.job_owner_id}, is_active: ${chat.is_active}`)
+        }
+        return isVisible
       })
 
       // Sort by last message time (or proposal time if no messages)
@@ -220,7 +224,15 @@ export default function ChatListScreen() {
   }
 
   const navigateToChat = (chat: Chat) => {
-    router.push(`/chat/${chat.id}?jobId=${chat.job_id}&proposalId=${chat.proposal_id}`)
+    // Handle online/offline jobs correctly
+    const jobId = chat.job_id || chat.offline_job_id
+    const proposalId = chat.proposal_id || chat.offline_proposal_id
+
+    // Add debug log
+    console.log(`Navigating to chat ${chat.id} with jobId ${jobId} and proposalId ${proposalId}`)
+
+    // Navigate with correct params
+    router.push(`/chat/${chat.id}?jobId=${jobId}&proposalId=${proposalId}`)
   }
 
   const getInitials = (name: string) => {
@@ -247,10 +259,48 @@ export default function ChatListScreen() {
   }
 
   const renderChatItem = ({ item }: { item: Chat }) => {
+    // Prefer offline_job if present, else job
+    const jobTitle = item.offline_job?.title || item.job?.title || "Unknown Job"
+    // Prefer offline_proposal if present, else proposal
+    const proposalStatus = item.offline_proposal?.status || item.proposal?.status
+    const proposalCreatedAt = item.offline_proposal?.created_at || item.proposal?.created_at
+
     const isJobOwner = user?.id === item.job_owner_id
-    const otherUserName = item.other_user?.full_name || "Unknown User"
+    const isProposalSender = user?.id === item.proposal_owner_id
     const hasUnread = item.unread_count > 0
-    const isPending = item.proposal?.status !== "accepted" && (!item.last_message || item.last_message.is_system)
+
+    // Determine the exact status of the proposal
+    let proposalState = ""
+    let statusColor = ""
+    let avatarBgColor = ""
+    let textColor = ""
+    let textColorCode = ""
+
+    if (item.proposal?.status === "accepted") {
+      proposalState = "Accepted"
+      statusColor = "bg-green-100"
+      avatarBgColor = "bg-[#E7F7F1]"
+      textColor = "text-green-800"
+      textColorCode = "#166534" // green-800
+    } else if (isProposalSender) {
+      proposalState = "Sent"
+      statusColor = "bg-blue-100"
+      avatarBgColor = "bg-blue-50"
+      textColor = "text-blue-800"
+      textColorCode = "#1e40af" // blue-800
+    } else if (isJobOwner && !item.last_message) {
+      proposalState = "Review"
+      statusColor = "bg-yellow-100"
+      avatarBgColor = "bg-yellow-50"
+      textColor = "text-yellow-800"
+      textColorCode = "#854d0e" // yellow-800
+    } else if (item.last_message && item.proposal?.status !== "accepted") {
+      proposalState = "Discussing"
+      statusColor = "bg-purple-100"
+      avatarBgColor = "bg-purple-50"
+      textColor = "text-purple-800"
+      textColorCode = "#6b21a8" // purple-800
+    }
 
     let lastMessageText = "No messages yet"
     let lastMessageTime = ""
@@ -264,8 +314,14 @@ export default function ChatListScreen() {
     } else if (item.proposal?.created_at) {
       // If no messages, show when the proposal was created
       lastMessageTime = formatMessageTime(item.proposal.created_at)
-      lastMessageText = "New proposal submitted"
+      if (isProposalSender) {
+        lastMessageText = "You submitted a proposal"
+      } else {
+        lastMessageText = "New proposal awaiting your review"
+      }
     }
+
+    const otherUserName = item.other_user?.full_name || `User ${item.other_user.user_id.substring(0, 8)}`
 
     return (
       <TouchableOpacity
@@ -273,10 +329,10 @@ export default function ChatListScreen() {
         onPress={() => navigateToChat(item)}
       >
         <View className="flex-row items-center">
-          <View
-            className={`w-12 h-12 rounded-full ${isPending ? "bg-gray-100" : "bg-[#E7F7F1]"} items-center justify-center mr-3`}
-          >
-            <Text className={`${isPending ? "text-gray-500" : "text-[#0D9F70]"} font-pbold`}>
+          <View className={`w-12 h-12 rounded-full ${avatarBgColor || "bg-gray-100"} items-center justify-center mr-3`}>
+            <Text
+              className={`${proposalState === "Accepted" ? "text-[#0D9F70]" : textColor || "text-gray-500"} font-pbold`}
+            >
               {getInitials(otherUserName)}
             </Text>
           </View>
@@ -289,18 +345,17 @@ export default function ChatListScreen() {
 
             <View className="flex-row items-center">
               <Text className="text-gray-500 text-sm" numberOfLines={1}>
-                {item.job.title}
+                {jobTitle}
               </Text>
 
-              {isPending && (
-                <View className="ml-2 px-2 py-0.5 bg-yellow-100 rounded-full">
-                  <Text className="text-yellow-800 text-xs">Pending</Text>
-                </View>
-              )}
-
-              {item.proposal?.status === "accepted" && (
-                <View className="ml-2 px-2 py-0.5 bg-green-100 rounded-full">
-                  <Text className="text-green-800 text-xs">Accepted</Text>
+              {proposalState && (
+                <View className={`ml-2 px-2 py-0.5 rounded-full ${statusColor} flex-row items-center`}>
+                  {isProposalSender ? (
+                    <ArrowUpRight size={12} color={textColorCode} className="mr-1" />
+                  ) : (
+                    <ArrowDownLeft size={12} color={textColorCode} className="mr-1" />
+                  )}
+                  <Text className={`text-xs ${textColor}`}>{proposalState}</Text>
                 </View>
               )}
             </View>

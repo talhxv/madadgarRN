@@ -362,10 +362,9 @@ export default function Home() {
                 style={{
                     height: headerHeight,
                     paddingTop: headerPaddingTop,
-                    paddingBottom: headerPaddingBottom,
+                    paddingBottom: 18, // reduced from headerPaddingBottom
                     borderBottomRightRadius: 70,
                     backgroundColor: undefined,
-                    
                 }}
             >
                 <LinearGradient
@@ -396,21 +395,21 @@ export default function Home() {
                 </Animated.View>
                 {/* This section is always visible */}
                 <View style={{ flex: 1, justifyContent: "flex-end" }}>
-    <Animated.View style={{ transform: [{ translateY: addressBarTranslateY }] }}>
-        <TouchableOpacity
-            onPress={() => setShowLocationModal(true)}
-            className="bg-white/20 px-4 py-2.5 rounded-full w-2/3 flex-row items-center"
-            activeOpacity={0.7}
-        >
-                        <MapPin size={18} color="white" />
-                        <View className="flex-1 ml-2 mr-1">
-                            <Text className="text-white/80 text-xs font-pmedium">Current Location</Text>
-                            <Text className="text-white font-psemibold" numberOfLines={1}>
-                                {formattedAddress}
-                            </Text>
-                        </View>
-                        <ChevronDown size={16} color="white" />
-                    </TouchableOpacity>
+                    <Animated.View style={{ transform: [{ translateY: addressBarTranslateY }] }}>
+                        <TouchableOpacity
+                            onPress={() => setShowLocationModal(true)}
+                            className="bg-white/20 px-4 py-2.5 rounded-full w-2/3 flex-row items-center mt-3"
+                            activeOpacity={0.7}
+                        >
+                            <MapPin size={18} color="white" />
+                            <View className="flex-1 ml-2 mr-1">
+                                <Text className="text-white/80 text-xs font-pmedium">Current Location</Text>
+                                <Text className="text-white font-psemibold" numberOfLines={1}>
+                                    {formattedAddress}
+                                </Text>
+                            </View>
+                            <ChevronDown size={16} color="white" />
+                        </TouchableOpacity>
                     </Animated.View>
                 </View>
             </Animated.View>

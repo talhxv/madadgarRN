@@ -1,454 +1,1038 @@
-"use client"
+// // "use client"
 
-import { useState, useEffect } from "react"
-import {
-    View,
-    Text,
-    FlatList,
-    TouchableOpacity,
-    Modal,
-    Image,
-    ScrollView,
-    ActivityIndicator,
-    Animated,
-} from "react-native"
-import { supabase } from "@/lib/supabase"
-import { format } from "date-fns"
-import { X, Clock, DollarSign, MapPin, Award, Calendar, ArrowLeft, ChevronRight } from "lucide-react-native"
-import { useAuth } from "@/contexts/AuthContext"
+// // import { useState, useEffect } from "react"
+// // import {
+// //     View,
+// //     Text,
+// //     FlatList,
+// //     TouchableOpacity,
+// //     Modal,
+// //     Image,
+// //     ScrollView,
+// //     ActivityIndicator,
+// //     Animated,
+// // } from "react-native"
+// // import { supabase } from "@/lib/supabase"
+// // import { format } from "date-fns"
+// // import { X, Clock, DollarSign, MapPin, Award, Calendar, ArrowLeft, ChevronRight } from "lucide-react-native"
+// // import { useAuth } from "@/contexts/AuthContext"
 
-// Job type definition based on your schema
-type Job = {
-    id: string
-    title: string
-    description: string
-    payment_type: "hourly" | "project"
-    amount: number
-    currency: string
-    time_required: number
-    time_unit: string
-    skill_level: "amateur" | "intermediate" | "professional"
-    status: "open" | "in_progress" | "completed" | "cancelled"
-    location_address: string | null
-    images: string[]
-    created_at: string
-    updated_at: string
-    category: { name: string } | null
-}
+// // // Job type definition based on your schema
+// // type Job = {
+// //     id: string
+// //     title: string
+// //     description: string
+// //     payment_type: "hourly" | "project"
+// //     amount: number
+// //     currency: string
+// //     time_required: number
+// //     time_unit: string
+// //     skill_level: "amateur" | "intermediate" | "professional"
+// //     status: "open" | "in_progress" | "completed" | "cancelled"
+// //     location_address: string | null
+// //     images: string[]
+// //     created_at: string
+// //     updated_at: string
+// //     category: { name: string } | null
+// // }
 
-const History = ({ navigation }) => {
-    const { user } = useAuth()
-    const [jobs, setJobs] = useState<Job[]>([])
-    const [selectedJob, setSelectedJob] = useState<Job | null>(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-    const [modalAnimation] = useState(new Animated.Value(0))
+// // const History = ({ navigation }) => {
+// //     const { user } = useAuth()
+// //     const [jobs, setJobs] = useState<Job[]>([])
+// //     const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+// //     const [loading, setLoading] = useState(true)
+// //     const [error, setError] = useState<string | null>(null)
+// //     const [modalAnimation] = useState(new Animated.Value(0))
 
-    useEffect(() => {
-        if (user) {
-            fetchJobs()
-        } else {
-            setError("User not authenticated")
-            setLoading(false)
-        }
-    }, [user])
+// //     useEffect(() => {
+// //         if (user) {
+// //             fetchJobs()
+// //         } else {
+// //             setError("User not authenticated")
+// //             setLoading(false)
+// //         }
+// //     }, [user])
 
-    useEffect(() => {
-        if (selectedJob) {
-            Animated.spring(modalAnimation, {
-                toValue: 1,
-                useNativeDriver: true,
-                tension: 65,
-                friction: 7,
-            }).start()
-        } else {
-            Animated.timing(modalAnimation, {
-                toValue: 0,
-                duration: 200,
-                useNativeDriver: true,
-            }).start()
-        }
-    }, [selectedJob])
+// //     useEffect(() => {
+// //         if (selectedJob) {
+// //             Animated.spring(modalAnimation, {
+// //                 toValue: 1,
+// //                 useNativeDriver: true,
+// //                 tension: 65,
+// //                 friction: 7,
+// //             }).start()
+// //         } else {
+// //             Animated.timing(modalAnimation, {
+// //                 toValue: 0,
+// //                 duration: 200,
+// //                 useNativeDriver: true,
+// //             }).start()
+// //         }
+// //     }, [selectedJob])
 
-    const fetchJobs = async () => {
-        try {
-            setLoading(true)
+// //     const fetchJobs = async () => {
+// //         try {
+// //             setLoading(true)
 
-            if (!user) {
-                throw new Error("User not authenticated")
-            }
+// //             if (!user) {
+// //                 throw new Error("User not authenticated")
+// //             }
 
-            // Fetch jobs for the current user
-            const { data, error } = await supabase
-                .from("jobs")
-                .select(`
-                    *,
-                    category:category_id(name)
-                `)
-                .eq("user_id", user.id)
-                .order("created_at", { ascending: false })
+// //             // Fetch jobs for the current user
+// //             const { data, error } = await supabase
+// //                 .from("jobs")
+// //                 .select(`
+// //                     *,
+// //                     category:category_id(name)
+// //                 `)
+// //                 .eq("user_id", user.id)
+// //                 .order("created_at", { ascending: false })
 
-            if (error) throw error
+// //             if (error) throw error
 
-            setJobs(data || [])
-        } catch (err) {
-            console.error("Error fetching jobs:", err)
-            setError(err instanceof Error ? err.message : "Failed to fetch jobs")
-        } finally {
-            setLoading(false)
-        }
-    }
+// //             setJobs(data || [])
+// //         } catch (err) {
+// //             console.error("Error fetching jobs:", err)
+// //             setError(err instanceof Error ? err.message : "Failed to fetch jobs")
+// //         } finally {
+// //             setLoading(false)
+// //         }
+// //     }
 
-    const getStatusColor = (status: Job["status"]) => {
-        switch (status) {
-            case "open":
-                return "bg-[#0D9F70] text-white"
-            case "in_progress":
-                return "bg-amber-500 text-white"
-            case "completed":
-                return "bg-blue-500 text-white"
-            case "cancelled":
-                return "bg-red-500 text-white"
-            default:
-                return "bg-gray-500 text-white"
-        }
-    }
+// //     const getStatusColor = (status: Job["status"]) => {
+// //         switch (status) {
+// //             case "open":
+// //                 return "bg-[#0D9F70] text-white"
+// //             case "in_progress":
+// //                 return "bg-amber-500 text-white"
+// //             case "completed":
+// //                 return "bg-blue-500 text-white"
+// //             case "cancelled":
+// //                 return "bg-red-500 text-white"
+// //             default:
+// //                 return "bg-gray-500 text-white"
+// //         }
+// //     }
 
-    const getStatusText = (status: Job["status"]) => {
-        switch (status) {
-            case "open":
-                return "Open"
-            case "in_progress":
-                return "In Progress"
-            case "completed":
-                return "Completed"
-            case "cancelled":
-                return "Cancelled"
-            default:
-                return status.replace("_", " ")
-        }
-    }
+// //     const getStatusText = (status: Job["status"]) => {
+// //         switch (status) {
+// //             case "open":
+// //                 return "Open"
+// //             case "in_progress":
+// //                 return "In Progress"
+// //             case "completed":
+// //                 return "Completed"
+// //             case "cancelled":
+// //                 return "Cancelled"
+// //             default:
+// //                 return status.replace("_", " ")
+// //         }
+// //     }
 
-    const getSkillLevelBadge = (level: Job["skill_level"]) => {
-        switch (level) {
-            case "amateur":
-                return "bg-emerald-100 text-emerald-700"
-            case "intermediate":
-                return "bg-blue-100 text-blue-700"
-            case "professional":
-                return "bg-purple-100 text-purple-700"
-            default:
-                return "bg-gray-100 text-gray-600"
-        }
-    }
+// //     const getSkillLevelBadge = (level: Job["skill_level"]) => {
+// //         switch (level) {
+// //             case "amateur":
+// //                 return "bg-emerald-100 text-emerald-700"
+// //             case "intermediate":
+// //                 return "bg-blue-100 text-blue-700"
+// //             case "professional":
+// //                 return "bg-purple-100 text-purple-700"
+// //             default:
+// //                 return "bg-gray-100 text-gray-600"
+// //         }
+// //     }
 
-    const getSkillLevelIcon = (level: Job["skill_level"]) => {
-        switch (level) {
-            case "amateur":
-                return "⭐"
-            case "intermediate":
-                return "⭐⭐"
-            case "professional":
-                return "⭐⭐⭐"
-            default:
-                return "⭐"
-        }
-    }
+// //     const getSkillLevelIcon = (level: Job["skill_level"]) => {
+// //         switch (level) {
+// //             case "amateur":
+// //                 return "⭐"
+// //             case "intermediate":
+// //                 return "⭐⭐"
+// //             case "professional":
+// //                 return "⭐⭐⭐"
+// //             default:
+// //                 return "⭐"
+// //         }
+// //     }
 
-    const formatCurrency = (amount: number, currency: string) => {
-        return `${currency} ${amount.toFixed(0)}`
-    }
+// //     const formatCurrency = (amount: number, currency: string) => {
+// //         return `${currency} ${amount.toFixed(0)}`
+// //     }
 
-    const JobCard = ({ job }: { job: Job }) => (
-        <TouchableOpacity
-            className="bg-white rounded-2xl mb-4 overflow-hidden shadow-sm border border-gray-100"
-            style={{ elevation: 2 }}
-            onPress={() => setSelectedJob(job)}
-            activeOpacity={0.7}
-        >
-            <View className="p-5">
-                <View className="flex-row justify-between items-start">
-                    <View className="flex-1 mr-3">
-                        <Text className="text-lg font-pbold text-gray-800">{job.title}</Text>
-                    </View>
-                    <View className={`px-3 py-1.5 rounded-full ${getStatusColor(job.status)}`}>
-                        <Text className="text-xs text-white font-pmedium">{getStatusText(job.status)}</Text>
-                    </View>
-                </View>
+// //     const JobCard = ({ job }: { job: Job }) => (
+// //         <TouchableOpacity
+// //             className="bg-white rounded-2xl mb-4 overflow-hidden shadow-sm border border-gray-100"
+// //             style={{ elevation: 2 }}
+// //             onPress={() => setSelectedJob(job)}
+// //             activeOpacity={0.7}
+// //         >
+// //             <View className="p-5">
+// //                 <View className="flex-row justify-between items-start">
+// //                     <View className="flex-1 mr-3">
+// //                         <Text className="text-lg font-pbold text-gray-800">{job.title}</Text>
+// //                     </View>
+// //                     <View className={`px-3 py-1.5 rounded-full ${getStatusColor(job.status)}`}>
+// //                         <Text className="text-xs text-white font-pmedium">{getStatusText(job.status)}</Text>
+// //                     </View>
+// //                 </View>
 
-                <View className="flex-row items-center mt-3 flex-wrap">
-                    {job.category?.name && (
-                        <View className="bg-[#E7F7F1] px-3 py-1.5 rounded-full mr-2 mb-2">
-                            <Text className="text-sm font-pmedium text-[#0D9F70]">{job.category.name}</Text>
-                        </View>
-                    )}
+// //                 <View className="flex-row items-center mt-3 flex-wrap">
+// //                     {job.category?.name && (
+// //                         <View className="bg-[#E7F7F1] px-3 py-1.5 rounded-full mr-2 mb-2">
+// //                             <Text className="text-sm font-pmedium text-[#0D9F70]">{job.category.name}</Text>
+// //                         </View>
+// //                     )}
 
-                    <View className={`px-3 py-1.5 rounded-full mr-2 mb-2 ${getSkillLevelBadge(job.skill_level)}`}>
-                        <Text className="text-sm font-pmedium capitalize">
-                            {job.skill_level} {getSkillLevelIcon(job.skill_level)}
-                        </Text>
-                    </View>
-                </View>
+// //                     <View className={`px-3 py-1.5 rounded-full mr-2 mb-2 ${getSkillLevelBadge(job.skill_level)}`}>
+// //                         <Text className="text-sm font-pmedium capitalize">
+// //                             {job.skill_level} {getSkillLevelIcon(job.skill_level)}
+// //                         </Text>
+// //                     </View>
+// //                 </View>
 
-                <View className="h-px bg-gray-100 my-3" />
+// //                 <View className="h-px bg-gray-100 my-3" />
 
-                <View className="flex-row justify-between items-center">
-                    <View className="flex-row items-center">
-                        <DollarSign size={16} color="#0D9F70" />
-                        <Text className="text-gray-800 font-pbold ml-1">
-                            {job.currency} {job.amount}
-                            <Text className="text-gray-500 font-pregular">
-                                {" "}
-                                • {job.payment_type === "hourly" ? "Hourly" : "Project"}
-                            </Text>
-                        </Text>
-                    </View>
+// //                 <View className="flex-row justify-between items-center">
+// //                     <View className="flex-row items-center">
+// //                         <DollarSign size={16} color="#0D9F70" />
+// //                         <Text className="text-gray-800 font-pbold ml-1">
+// //                             {job.currency} {job.amount}
+// //                             <Text className="text-gray-500 font-pregular">
+// //                                 {" "}
+// //                                 • {job.payment_type === "hourly" ? "Hourly" : "Project"}
+// //                             </Text>
+// //                         </Text>
+// //                     </View>
 
-                    <View className="flex-row items-center">
-                        <Clock size={16} color="#0D9F70" />
-                        <Text className="text-gray-800 font-pmedium ml-1">
-                            {job.time_required} {job.time_unit}
-                        </Text>
-                    </View>
-                </View>
+// //                     <View className="flex-row items-center">
+// //                         <Clock size={16} color="#0D9F70" />
+// //                         <Text className="text-gray-800 font-pmedium ml-1">
+// //                             {job.time_required} {job.time_unit}
+// //                         </Text>
+// //                     </View>
+// //                 </View>
 
-                <View className="flex-row items-center justify-between mt-3">
-                    <Text className="text-gray-500 text-xs font-pregular">
-                        Posted {format(new Date(job.created_at), "MMM dd, yyyy")}
-                    </Text>
-                    <View className="flex-row items-center">
-                        <Text className="text-[#0D9F70] font-pmedium mr-1">Details</Text>
-                        <ChevronRight size={16} color="#0D9F70" />
-                    </View>
-                </View>
-            </View>
-        </TouchableOpacity>
-    )
+// //                 <View className="flex-row items-center justify-between mt-3">
+// //                     <Text className="text-gray-500 text-xs font-pregular">
+// //                         Posted {format(new Date(job.created_at), "MMM dd, yyyy")}
+// //                     </Text>
+// //                     <View className="flex-row items-center">
+// //                         <Text className="text-[#0D9F70] font-pmedium mr-1">Details</Text>
+// //                         <ChevronRight size={16} color="#0D9F70" />
+// //                     </View>
+// //                 </View>
+// //             </View>
+// //         </TouchableOpacity>
+// //     )
 
-    const JobDetailModal = () => {
-        if (!selectedJob) return null
+// //     const JobDetailModal = () => {
+// //         if (!selectedJob) return null
 
-        const translateY = modalAnimation.interpolate({
-            inputRange: [0, 1],
-            outputRange: [300, 0],
-        })
+// //         const translateY = modalAnimation.interpolate({
+// //             inputRange: [0, 1],
+// //             outputRange: [300, 0],
+// //         })
 
-        return (
-            <Modal
-                animationType="fade"
-                transparent={true}
-                visible={!!selectedJob}
-                onRequestClose={() => setSelectedJob(null)}
-            >
-                <View className="flex-1 bg-black/60 justify-end">
-                    <Animated.View
-                        style={{
-                            transform: [{ translateY }],
-                            maxHeight: "90%",
-                            borderTopLeftRadius: 24,
-                            borderTopRightRadius: 24,
-                            backgroundColor: "white",
-                            overflow: "hidden",
-                        }}
-                    >
-                        <View className="w-12 h-1.5 bg-gray-300 rounded-full self-center my-3" />
+// //         return (
+// //             <Modal
+// //                 animationType="fade"
+// //                 transparent={true}
+// //                 visible={!!selectedJob}
+// //                 onRequestClose={() => setSelectedJob(null)}
+// //             >
+// //                 <View className="flex-1 bg-black/60 justify-end">
+// //                     <Animated.View
+// //                         style={{
+// //                             transform: [{ translateY }],
+// //                             maxHeight: "90%",
+// //                             borderTopLeftRadius: 24,
+// //                             borderTopRightRadius: 24,
+// //                             backgroundColor: "white",
+// //                             overflow: "hidden",
+// //                         }}
+// //                     >
+// //                         <View className="w-12 h-1.5 bg-gray-300 rounded-full self-center my-3" />
 
-                        <ScrollView className="px-6" showsVerticalScrollIndicator={false}>
-                            <View className="flex-row justify-between items-center mb-4 pt-2">
-                                <Text className="text-2xl font-pbold text-gray-800 flex-1 mr-2">{selectedJob.title}</Text>
-                                <TouchableOpacity
-                                    onPress={() => setSelectedJob(null)}
-                                    className="p-2 rounded-full bg-gray-100"
-                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                >
-                                    <X size={20} color="#666" />
-                                </TouchableOpacity>
-                            </View>
+// //                         <ScrollView className="px-6" showsVerticalScrollIndicator={false}>
+// //                             <View className="flex-row justify-between items-center mb-4 pt-2">
+// //                                 <Text className="text-2xl font-pbold text-gray-800 flex-1 mr-2">{selectedJob.title}</Text>
+// //                                 <TouchableOpacity
+// //                                     onPress={() => setSelectedJob(null)}
+// //                                     className="p-2 rounded-full bg-gray-100"
+// //                                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+// //                                 >
+// //                                     <X size={20} color="#666" />
+// //                                 </TouchableOpacity>
+// //                             </View>
 
-                            <View className="flex-row flex-wrap mb-5">
-                                <View className={`px-3 py-1.5 rounded-full mr-2 mb-2 ${getStatusColor(selectedJob.status)}`}>
-                                    <Text className="text-sm text-white font-pmedium">{getStatusText(selectedJob.status)}</Text>
-                                </View>
+// //                             <View className="flex-row flex-wrap mb-5">
+// //                                 <View className={`px-3 py-1.5 rounded-full mr-2 mb-2 ${getStatusColor(selectedJob.status)}`}>
+// //                                     <Text className="text-sm text-white font-pmedium">{getStatusText(selectedJob.status)}</Text>
+// //                                 </View>
 
-                                {selectedJob.category?.name && (
-                                    <View className="bg-[#E7F7F1] px-3 py-1.5 rounded-full mr-2 mb-2">
-                                        <Text className="text-sm font-pmedium text-[#0D9F70]">{selectedJob.category.name}</Text>
-                                    </View>
-                                )}
+// //                                 {selectedJob.category?.name && (
+// //                                     <View className="bg-[#E7F7F1] px-3 py-1.5 rounded-full mr-2 mb-2">
+// //                                         <Text className="text-sm font-pmedium text-[#0D9F70]">{selectedJob.category.name}</Text>
+// //                                     </View>
+// //                                 )}
 
-                                <View className={`px-3 py-1.5 rounded-full mb-2 ${getSkillLevelBadge(selectedJob.skill_level)}`}>
-                                    <Text className="text-sm font-pmedium capitalize">
-                                        {selectedJob.skill_level} {getSkillLevelIcon(selectedJob.skill_level)}
-                                    </Text>
-                                </View>
-                            </View>
+// //                                 <View className={`px-3 py-1.5 rounded-full mb-2 ${getSkillLevelBadge(selectedJob.skill_level)}`}>
+// //                                     <Text className="text-sm font-pmedium capitalize">
+// //                                         {selectedJob.skill_level} {getSkillLevelIcon(selectedJob.skill_level)}
+// //                                     </Text>
+// //                                 </View>
+// //                             </View>
 
-                            {selectedJob.images && selectedJob.images.length > 0 && (
-                                <View className="mb-6">
-                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-1">
-                                        {selectedJob.images.map((imageUrl, index) => (
-                                            <Image
-                                                key={index}
-                                                source={{ uri: imageUrl }}
-                                                className="w-32 h-32 rounded-2xl mr-3"
-                                                resizeMode="cover"
-                                            />
-                                        ))}
-                                    </ScrollView>
-                                </View>
-                            )}
+// //                             {selectedJob.images && selectedJob.images.length > 0 && (
+// //                                 <View className="mb-6">
+// //                                     <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-1">
+// //                                         {selectedJob.images.map((imageUrl, index) => (
+// //                                             <Image
+// //                                                 key={index}
+// //                                                 source={{ uri: imageUrl }}
+// //                                                 className="w-32 h-32 rounded-2xl mr-3"
+// //                                                 resizeMode="cover"
+// //                                             />
+// //                                         ))}
+// //                                     </ScrollView>
+// //                                 </View>
+// //                             )}
 
-                            <View className="bg-gray-50 p-4 rounded-2xl mb-6">
-                                <Text className="text-[#0D9F70] mb-2 text-base font-pbold">Description</Text>
-                                <Text className="text-gray-700 font-pregular leading-5">{selectedJob.description}</Text>
-                            </View>
+// //                             <View className="bg-gray-50 p-4 rounded-2xl mb-6">
+// //                                 <Text className="text-[#0D9F70] mb-2 text-base font-pbold">Description</Text>
+// //                                 <Text className="text-gray-700 font-pregular leading-5">{selectedJob.description}</Text>
+// //                             </View>
 
-                            <View className="bg-gray-50 p-4 rounded-2xl mb-6">
-                                <Text className="text-[#0D9F70] mb-3 text-base font-pbold">Job Details</Text>
+// //                             <View className="bg-gray-50 p-4 rounded-2xl mb-6">
+// //                                 <Text className="text-[#0D9F70] mb-3 text-base font-pbold">Job Details</Text>
 
-                                <View className="flex-row items-center mb-4">
-                                    <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
-                                        <DollarSign size={18} color="#0D9F70" />
-                                    </View>
-                                    <View className="ml-3">
-                                        <Text className="text-gray-500 text-xs font-pregular">Payment</Text>
-                                        <Text className="text-gray-800 font-pmedium">
-                                            {formatCurrency(selectedJob.amount, selectedJob.currency)} •{" "}
-                                            {selectedJob.payment_type === "hourly" ? "Hourly rate" : "Project budget"}
-                                        </Text>
-                                    </View>
-                                </View>
+// //                                 <View className="flex-row items-center mb-4">
+// //                                     <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
+// //                                         <DollarSign size={18} color="#0D9F70" />
+// //                                     </View>
+// //                                     <View className="ml-3">
+// //                                         <Text className="text-gray-500 text-xs font-pregular">Payment</Text>
+// //                                         <Text className="text-gray-800 font-pmedium">
+// //                                             {formatCurrency(selectedJob.amount, selectedJob.currency)} •{" "}
+// //                                             {selectedJob.payment_type === "hourly" ? "Hourly rate" : "Project budget"}
+// //                                         </Text>
+// //                                     </View>
+// //                                 </View>
 
-                                <View className="flex-row items-center mb-4">
-                                    <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
-                                        <Clock size={18} color="#0D9F70" />
-                                    </View>
-                                    <View className="ml-3">
-                                        <Text className="text-gray-500 text-xs font-pregular">Time Required</Text>
-                                        <Text className="text-gray-800 font-pmedium">
-                                            {selectedJob.time_required} {selectedJob.time_unit}
-                                        </Text>
-                                    </View>
-                                </View>
+// //                                 <View className="flex-row items-center mb-4">
+// //                                     <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
+// //                                         <Clock size={18} color="#0D9F70" />
+// //                                     </View>
+// //                                     <View className="ml-3">
+// //                                         <Text className="text-gray-500 text-xs font-pregular">Time Required</Text>
+// //                                         <Text className="text-gray-800 font-pmedium">
+// //                                             {selectedJob.time_required} {selectedJob.time_unit}
+// //                                         </Text>
+// //                                     </View>
+// //                                 </View>
 
-                                {selectedJob.location_address && (
-                                    <View className="flex-row items-center mb-4">
-                                        <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
-                                            <MapPin size={18} color="#0D9F70" />
-                                        </View>
-                                        <View className="ml-3">
-                                            <Text className="text-gray-500 text-xs font-pregular">Location</Text>
-                                            <Text className="text-gray-800 font-pmedium">{selectedJob.location_address}</Text>
-                                        </View>
-                                    </View>
-                                )}
+// //                                 {selectedJob.location_address && (
+// //                                     <View className="flex-row items-center mb-4">
+// //                                         <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
+// //                                             <MapPin size={18} color="#0D9F70" />
+// //                                         </View>
+// //                                         <View className="ml-3">
+// //                                             <Text className="text-gray-500 text-xs font-pregular">Location</Text>
+// //                                             <Text className="text-gray-800 font-pmedium">{selectedJob.location_address}</Text>
+// //                                         </View>
+// //                                     </View>
+// //                                 )}
 
-                                <View className="flex-row items-center mb-4">
-                                    <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
-                                        <Award size={18} color="#0D9F70" />
-                                    </View>
-                                    <View className="ml-3">
-                                        <Text className="text-gray-500 text-xs font-pregular">Skill Level</Text>
-                                        <Text className="text-gray-800 font-pmedium capitalize">
-                                            {selectedJob.skill_level} {getSkillLevelIcon(selectedJob.skill_level)}
-                                        </Text>
-                                    </View>
-                                </View>
+// //                                 <View className="flex-row items-center mb-4">
+// //                                     <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
+// //                                         <Award size={18} color="#0D9F70" />
+// //                                     </View>
+// //                                     <View className="ml-3">
+// //                                         <Text className="text-gray-500 text-xs font-pregular">Skill Level</Text>
+// //                                         <Text className="text-gray-800 font-pmedium capitalize">
+// //                                             {selectedJob.skill_level} {getSkillLevelIcon(selectedJob.skill_level)}
+// //                                         </Text>
+// //                                     </View>
+// //                                 </View>
 
-                                <View className="flex-row items-center">
-                                    <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
-                                        <Calendar size={18} color="#0D9F70" />
-                                    </View>
-                                    <View className="ml-3">
-                                        <Text className="text-gray-500 text-xs font-pregular">Posted Date</Text>
-                                        <Text className="text-gray-800 font-pmedium">
-                                            {format(new Date(selectedJob.created_at), "MMMM dd, yyyy")}
-                                        </Text>
-                                    </View>
-                                </View>
-                            </View>
+// //                                 <View className="flex-row items-center">
+// //                                     <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
+// //                                         <Calendar size={18} color="#0D9F70" />
+// //                                     </View>
+// //                                     <View className="ml-3">
+// //                                         <Text className="text-gray-500 text-xs font-pregular">Posted Date</Text>
+// //                                         <Text className="text-gray-800 font-pmedium">
+// //                                             {format(new Date(selectedJob.created_at), "MMMM dd, yyyy")}
+// //                                         </Text>
+// //                                     </View>
+// //                                 </View>
+// //                             </View>
 
-                            <View className="h-24" />
-                        </ScrollView>
+// //                             <View className="h-24" />
+// //                         </ScrollView>
 
-                        <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-4">
-                            <TouchableOpacity
-                                className="bg-[#0D9F70] py-3.5 rounded-xl w-full items-center"
-                                onPress={() => setSelectedJob(null)}
-                            >
-                                <Text className="text-white font-pbold">Close</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Animated.View>
-                </View>
-            </Modal>
-        )
-    }
+// //                         <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-4">
+// //                             <TouchableOpacity
+// //                                 className="bg-[#0D9F70] py-3.5 rounded-xl w-full items-center"
+// //                                 onPress={() => setSelectedJob(null)}
+// //                             >
+// //                                 <Text className="text-white font-pbold">Close</Text>
+// //                             </TouchableOpacity>
+// //                         </View>
+// //                     </Animated.View>
+// //                 </View>
+// //             </Modal>
+// //         )
+// //     }
 
-    if (loading) {
-        return (
-            <View className="flex-1 justify-center items-center p-4">
-                <ActivityIndicator size="large" color="#0D9F70" />
-                <Text className="mt-2 text-gray-600 font-pregular">Loading your job history...</Text>
-            </View>
-        )
-    }
+// //     if (loading) {
+// //         return (
+// //             <View className="flex-1 justify-center items-center p-4">
+// //                 <ActivityIndicator size="large" color="#0D9F70" />
+// //                 <Text className="mt-2 text-gray-600 font-pregular">Loading your job history...</Text>
+// //             </View>
+// //         )
+// //     }
 
-    if (error) {
-        return (
-            <View className="flex-1 justify-center items-center p-4">
-                <Text className="text-red-500 mb-2 font-pmedium">Error loading jobs</Text>
-                <Text className="text-gray-600 mb-4 font-pregular">{error}</Text>
-                <TouchableOpacity className="bg-[#0D9F70] px-6 py-3 rounded-xl" onPress={fetchJobs}>
-                    <Text className="text-white font-pmedium">Try Again</Text>
-                </TouchableOpacity>
-            </View>
-        )
-    }
+// //     if (error) {
+// //         return (
+// //             <View className="flex-1 justify-center items-center p-4">
+// //                 <Text className="text-red-500 mb-2 font-pmedium">Error loading jobs</Text>
+// //                 <Text className="text-gray-600 mb-4 font-pregular">{error}</Text>
+// //                 <TouchableOpacity className="bg-[#0D9F70] px-6 py-3 rounded-xl" onPress={fetchJobs}>
+// //                     <Text className="text-white font-pmedium">Try Again</Text>
+// //                 </TouchableOpacity>
+// //             </View>
+// //         )
+// //     }
 
-    return (
-        <View className="flex-1 bg-gray-50">
-            {/* Header */}
-            <View className="bg-[#0D9F70] pt-12 pb-6 px-4 rounded-b-3xl shadow-md">
-                <View className="flex-row items-center justify-center relative">
-                    <TouchableOpacity
-                        onPress={() => navigation.goBack()}
-                        className="absolute left-0 p-2 rounded-full"
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                        <ArrowLeft color="white" size={24} />
-                    </TouchableOpacity>
-                    <Text className="text-white text-xl font-psemibold">Job History</Text>
-                </View>
-            </View>
+// //     return (
+// //         <View className="flex-1 bg-gray-50">
+// //             {/* Header */}
+// //             <View className="bg-[#0D9F70] pt-12 pb-6 px-4 rounded-b-3xl shadow-md">
+// //                 <View className="flex-row items-center justify-center relative">
+// //                     <TouchableOpacity
+// //                         onPress={() => navigation.goBack()}
+// //                         className="absolute left-0 p-2 rounded-full"
+// //                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+// //                     >
+// //                         <ArrowLeft color="white" size={24} />
+// //                     </TouchableOpacity>
+// //                     <Text className="text-white text-xl font-psemibold">Job History</Text>
+// //                 </View>
+// //             </View>
 
-            {jobs.length === 0 ? (
-                <ScrollView
-                    contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 16 }}
-                >
-                    <Text className="text-xl font-pbold text-gray-800 mb-2">No Jobs Found</Text>
-                    <Text className="text-gray-600 text-center mb-6 pregular">
-                        You haven't posted any jobs yet. When you do, they'll appear here.
-                    </Text>
-                    <TouchableOpacity
-                        className="bg-[#0D9F70] px-8 py-4 rounded-xl shadow-sm"
-                        onPress={() => navigation.navigate("CreateJob")}
-                    >
-                        <Text className="text-white font-pbold">Create a Job</Text>
-                    </TouchableOpacity>
-                </ScrollView>
-            ) : (
-                <FlatList
-                    data={jobs}
-                    keyExtractor={(item) => item.id}
-                    renderItem={({ item }) => <JobCard job={item} />}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
-                />
-            )}
-            <JobDetailModal />
-        </View>
-    )
-}
+// //             {jobs.length === 0 ? (
+// //                 <ScrollView
+// //                     contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 16 }}
+// //                 >
+// //                     <Text className="text-xl font-pbold text-gray-800 mb-2">No Jobs Found</Text>
+// //                     <Text className="text-gray-600 text-center mb-6 pregular">
+// //                         You haven't posted any jobs yet. When you do, they'll appear here.
+// //                     </Text>
+// //                     <TouchableOpacity
+// //                         className="bg-[#0D9F70] px-8 py-4 rounded-xl shadow-sm"
+// //                         onPress={() => navigation.navigate("CreateJob")}
+// //                     >
+// //                         <Text className="text-white font-pbold">Create a Job</Text>
+// //                     </TouchableOpacity>
+// //                 </ScrollView>
+// //             ) : (
+// //                 <FlatList
+// //                     data={jobs}
+// //                     keyExtractor={(item) => item.id}
+// //                     renderItem={({ item }) => <JobCard job={item} />}
+// //                     showsVerticalScrollIndicator={false}
+// //                     contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
+// //                 />
+// //             )}
+// //             <JobDetailModal />
+// //         </View>
+// //     )
+// // }
 
-export default History
+// // export default History
+
+// "use client"
+
+// import { useState, useEffect } from "react"
+// import {
+//   View,
+//   Text,
+//   FlatList,
+//   TouchableOpacity,
+//   Modal,
+//   Image,
+//   ScrollView,
+//   Animated,
+//   TextInput,
+//   RefreshControl,
+// } from "react-native"
+// import { supabase } from "@/lib/supabase"
+// import { format } from "date-fns"
+// import {
+//   X,
+//   Clock,
+//   DollarSign,
+//   MapPin,
+//   Award,
+//   Calendar,
+//   ArrowLeft,
+//   ChevronRight,
+//   Search,
+//   Briefcase,
+// } from "lucide-react-native"
+
+// // Job type definition based on your schema
+// type Job = {
+//   id: string
+//   user_id: string
+//   title: string
+//   description: string
+//   payment_type: "hourly" | "project"
+//   amount: number
+//   currency: string
+//   time_required: number
+//   time_unit: string
+//   skill_level: "amateur" | "intermediate" | "professional"
+//   status: "open" | "in_progress" | "completed" | "cancelled"
+//   location_address: string | null
+//   images: string[]
+//   created_at: string
+//   updated_at: string
+//   category: { name: string } | null
+//   user_profile?: {
+//     id: string
+//     bio: string | null
+//     profession: string | null
+//     user: {
+//       email: string
+//       user_metadata: {
+//         full_name?: string
+//         avatar_url?: string
+//       }
+//     } | null
+//   } | null
+// }
+
+// const ViewOnlineJobs = ({ navigation }) => {
+//   const [jobs, setJobs] = useState<Job[]>([])
+//   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+//   const [loading, setLoading] = useState(true)
+//   const [refreshing, setRefreshing] = useState(false)
+//   const [error, setError] = useState<string | null>(null)
+//   const [searchQuery, setSearchQuery] = useState("")
+//   const [modalAnimation] = useState(new Animated.Value(0))
+
+//   // Skeleton loading array
+//   const skeletonArray = Array(6).fill(0)
+
+//   useEffect(() => {
+//     fetchJobs()
+//   }, [])
+
+//   useEffect(() => {
+//     if (selectedJob) {
+//       Animated.spring(modalAnimation, {
+//         toValue: 1,
+//         useNativeDriver: true,
+//         tension: 65,
+//         friction: 7,
+//       }).start()
+//     } else {
+//       Animated.timing(modalAnimation, {
+//         toValue: 0,
+//         duration: 200,
+//         useNativeDriver: true,
+//       }).start()
+//     }
+//   }, [selectedJob])
+
+//   const fetchJobs = async () => {
+//     try {
+//       setLoading(true)
+
+//       // 1. Fetch jobs with category
+//       const { data: jobsData, error: jobsError } = await supabase
+//         .from("jobs")
+//         .select(`
+//           *,
+//           category:category_id(name)
+//         `)
+//         .eq("status", "open")
+//         .order("created_at", { ascending: false })
+
+//       if (jobsError) throw jobsError
+
+//       // 2. Fetch extended_profiles for all user_ids in jobs
+//       const userIds = jobsData.map(job => job.user_id)
+//       const { data: profilesData, error: profilesError } = await supabase
+//         .from("extended_profiles")
+//         .select("*")
+//         .in("user_id", userIds)
+
+//       if (profilesError) throw profilesError
+
+//       // 3. Merge jobs and profiles
+//       const jobsWithProfiles = jobsData.map(job => {
+//         const profile = profilesData.find(profile => profile.user_id === job.user_id) || null
+        
+//         return {
+//           ...job,
+//           user_profile: profile || null
+//         }
+//       })
+
+//       setJobs(jobsWithProfiles)
+//     } catch (err) {
+//       console.error("Error fetching jobs:", err)
+//       setError(err instanceof Error ? err.message : "Failed to fetch jobs")
+//     } finally {
+//       setLoading(false)
+//       setRefreshing(false)
+//     }
+//   }
+
+//   const onRefresh = () => {
+//     setRefreshing(true)
+//     fetchJobs()
+//   }
+
+//   const filteredJobs = jobs.filter(
+//     (job) =>
+//       job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+//       job.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+//       job.category?.name?.toLowerCase().includes(searchQuery.toLowerCase()),
+//   )
+
+//   const getStatusColor = (status: Job["status"]) => {
+//     switch (status) {
+//       case "open":
+//         return "bg-[#0D9F70] text-white"
+//       case "in_progress":
+//         return "bg-amber-500 text-white"
+//       case "completed":
+//         return "bg-blue-500 text-white"
+//       case "cancelled":
+//         return "bg-red-500 text-white"
+//       default:
+//         return "bg-gray-500 text-white"
+//     }
+//   }
+
+//   const getSkillLevelBadge = (level: Job["skill_level"]) => {
+//     switch (level) {
+//       case "amateur":
+//         return "bg-emerald-100 text-emerald-700"
+//       case "intermediate":
+//         return "bg-blue-100 text-blue-700"
+//       case "professional":
+//         return "bg-purple-100 text-purple-700"
+//       default:
+//         return "bg-gray-100 text-gray-600"
+//     }
+//   }
+
+//   const getSkillLevelIcon = (level: Job["skill_level"]) => {
+//     switch (level) {
+//       case "amateur":
+//         return "⭐"
+//       case "intermediate":
+//         return "⭐⭐"
+//       case "professional":
+//         return "⭐⭐⭐"
+//       default:
+//         return "⭐"
+//     }
+//   }
+
+//   const formatCurrency = (amount: number, currency: string) => {
+//     return `${currency} ${amount.toFixed(0)}`
+//   }
+
+//   const getUserName = (job: Job) => {
+//     if (!job.user_profile?.user) return "Unknown User"
+//     return job.user_profile.user.user_metadata?.full_name || job.user_profile.user.email || "Anonymous User"
+//   }
+
+//   const getUserInitials = (job: Job) => {
+//     if (!job.user_profile?.user) return "??"
+//     const name = job.user_profile.user.user_metadata?.full_name || job.user_profile.user.email || ""
+//     return name.substring(0, 2).toUpperCase()
+//   }
+
+//   const getUserAvatar = (job: Job) => {
+//     if (!job.user_profile?.user?.user_metadata?.avatar_url) return null
+//     return job.user_profile.user.user_metadata.avatar_url
+//   }
+
+//   const JobCard = ({ job }: { job: Job }) => (
+//     <TouchableOpacity
+//       className="bg-white rounded-2xl mb-4 overflow-hidden shadow-sm border border-gray-100"
+//       style={{ elevation: 2 }}
+//       onPress={() => setSelectedJob(job)}
+//       activeOpacity={0.7}
+//     >
+//       <View className="p-5">
+//         <View className="flex-row justify-between items-start">
+//           <View className="flex-1 mr-3">
+//             <Text className="text-lg font-pbold text-gray-800">{job.title}</Text>
+//           </View>
+//           <View className={`px-3 py-1.5 rounded-full ${getStatusColor(job.status)}`}>
+//             <Text className="text-xs text-white font-pmedium">
+//               {job.status === "open" ? "Open" : job.status.replace("_", " ")}
+//             </Text>
+//           </View>
+//         </View>
+
+//         <View className="flex-row items-center mt-3 flex-wrap">
+//           {job.category?.name && (
+//             <View className="bg-[#E7F7F1] px-3 py-1.5 rounded-full mr-2 mb-2">
+//               <Text className="text-sm font-pmedium text-[#0D9F70]">{job.category.name}</Text>
+//             </View>
+//           )}
+
+//           <View className={`px-3 py-1.5 rounded-full mr-2 mb-2 ${getSkillLevelBadge(job.skill_level)}`}>
+//             <Text className="text-sm font-pmedium capitalize">
+//               {job.skill_level} {getSkillLevelIcon(job.skill_level)}
+//             </Text>
+//           </View>
+//         </View>
+
+//         <View className="h-px bg-gray-100 my-3" />
+
+//         <View className="flex-row justify-between items-center">
+//           <View className="flex-row items-center">
+//             <DollarSign size={16} color="#0D9F70" />
+//             <Text className="text-gray-800 font-pbold ml-1">
+//               {job.currency} {job.amount}
+//               <Text className="text-gray-500 font-pregular">
+//                 {" "}
+//                 • {job.payment_type === "hourly" ? "Hourly" : "Project"}
+//               </Text>
+//             </Text>
+//           </View>
+
+//           <View className="flex-row items-center">
+//             <Clock size={16} color="#0D9F70" />
+//             <Text className="text-gray-800 font-pmedium ml-1">
+//               {job.time_required} {job.time_unit}
+//             </Text>
+//           </View>
+//         </View>
+
+//         <View className="flex-row items-center mt-3">
+//           {getUserAvatar(job) ? (
+//             <Image source={{ uri: getUserAvatar(job) }} className="w-6 h-6 rounded-full mr-2" />
+//           ) : (
+//             <View className="w-6 h-6 rounded-full bg-[#E7F7F1] items-center justify-center mr-2">
+//               <Text className="text-xs text-[#0D9F70] font-pbold">{getUserInitials(job)}</Text>
+//             </View>
+//           )}
+//           <Text className="text-gray-500 text-xs font-pregular">Posted by {getUserName(job)}</Text>
+//         </View>
+
+//         <View className="flex-row items-center justify-between mt-3">
+//           <Text className="text-gray-500 text-xs font-pregular">
+//             {format(new Date(job.created_at), "MMM dd, yyyy")}
+//           </Text>
+//           <View className="flex-row items-center">
+//             <Text className="text-[#0D9F70] font-pmedium mr-1">Details</Text>
+//             <ChevronRight size={16} color="#0D9F70" />
+//           </View>
+//         </View>
+//       </View>
+//     </TouchableOpacity>
+//   )
+
+//   const JobSkeleton = () => (
+//     <View
+//       className="bg-white rounded-2xl mb-4 overflow-hidden shadow-sm border border-gray-100 p-5"
+//       style={{ elevation: 2 }}
+//     >
+//       <View className="flex-row justify-between items-start">
+//         <View className="flex-1 mr-3 h-5 bg-gray-200 rounded-md" />
+//         <View className="w-16 h-6 bg-gray-200 rounded-full" />
+//       </View>
+
+//       <View className="flex-row mt-3">
+//         <View className="w-24 h-7 bg-gray-200 rounded-full mr-2" />
+//         <View className="w-24 h-7 bg-gray-200 rounded-full" />
+//       </View>
+
+//       <View className="h-px bg-gray-100 my-3" />
+
+//       <View className="flex-row justify-between items-center">
+//         <View className="w-32 h-5 bg-gray-200 rounded-md" />
+//         <View className="w-24 h-5 bg-gray-200 rounded-md" />
+//       </View>
+
+//       <View className="flex-row items-center mt-3">
+//         <View className="w-6 h-6 rounded-full bg-gray-200 mr-2" />
+//         <View className="w-40 h-4 bg-gray-200 rounded-md" />
+//       </View>
+
+//       <View className="flex-row items-center justify-between mt-3">
+//         <View className="w-24 h-4 bg-gray-200 rounded-md" />
+//         <View className="w-20 h-4 bg-gray-200 rounded-md" />
+//       </View>
+//     </View>
+//   )
+
+//   const JobDetailModal = () => {
+//     if (!selectedJob) return null
+
+//     const translateY = modalAnimation.interpolate({
+//       inputRange: [0, 1],
+//       outputRange: [300, 0],
+//     })
+
+//     return (
+//       <Modal
+//         animationType="fade"
+//         transparent={true}
+//         visible={!!selectedJob}
+//         onRequestClose={() => setSelectedJob(null)}
+//       >
+//         <View className="flex-1 bg-black/60 justify-end">
+//           <Animated.View
+//             style={{
+//               transform: [{ translateY }],
+//               maxHeight: "90%",
+//               borderTopLeftRadius: 24,
+//               borderTopRightRadius: 24,
+//               backgroundColor: "white",
+//               overflow: "hidden",
+//             }}
+//           >
+//             <View className="w-12 h-1.5 bg-gray-300 rounded-full self-center my-3" />
+
+//             <ScrollView className="px-6" showsVerticalScrollIndicator={false}>
+//               <View className="flex-row justify-between items-center mb-4 pt-2">
+//                 <Text className="text-2xl font-pbold text-gray-800 flex-1 mr-2">{selectedJob.title}</Text>
+//                 <TouchableOpacity
+//                   onPress={() => setSelectedJob(null)}
+//                   className="p-2 rounded-full bg-gray-100"
+//                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+//                 >
+//                   <X size={20} color="#666" />
+//                 </TouchableOpacity>
+//               </View>
+
+//               <View className="flex-row flex-wrap mb-5">
+//                 <View className={`px-3 py-1.5 rounded-full mr-2 mb-2 ${getStatusColor(selectedJob.status)}`}>
+//                   <Text className="text-sm text-white font-pmedium">
+//                     {selectedJob.status === "open" ? "Open" : selectedJob.status.replace("_", " ")}
+//                   </Text>
+//                 </View>
+
+//                 {selectedJob.category?.name && (
+//                   <View className="bg-[#E7F7F1] px-3 py-1.5 rounded-full mr-2 mb-2">
+//                     <Text className="text-sm font-pmedium text-[#0D9F70]">{selectedJob.category.name}</Text>
+//                   </View>
+//                 )}
+
+//                 <View className={`px-3 py-1.5 rounded-full mb-2 ${getSkillLevelBadge(selectedJob.skill_level)}`}>
+//                   <Text className="text-sm font-pmedium capitalize">
+//                     {selectedJob.skill_level} {getSkillLevelIcon(selectedJob.skill_level)}
+//                   </Text>
+//                 </View>
+//               </View>
+
+//               <View className="flex-row items-center mb-4">
+//                 {getUserAvatar(selectedJob) ? (
+//                   <Image source={{ uri: getUserAvatar(selectedJob) }} className="w-8 h-8 rounded-full mr-2" />
+//                 ) : (
+//                   <View className="w-8 h-8 rounded-full bg-[#E7F7F1] items-center justify-center mr-2">
+//                     <Text className="text-sm text-[#0D9F70] font-pbold">{getUserInitials(selectedJob)}</Text>
+//                   </View>
+//                 )}
+//                 <Text className="text-gray-700 font-pmedium">Posted by {getUserName(selectedJob)}</Text>
+//               </View>
+
+//               {selectedJob.images && selectedJob.images.length > 0 && (
+//                 <View className="mb-6">
+//                   <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-1">
+//                     {selectedJob.images.map((imageUrl, index) => (
+//                       <Image
+//                         key={index}
+//                         source={{ uri: imageUrl }}
+//                         className="w-32 h-32 rounded-2xl mr-3"
+//                         resizeMode="cover"
+//                       />
+//                     ))}
+//                   </ScrollView>
+//                 </View>
+//               )}
+
+//               <View className="bg-gray-50 p-4 rounded-2xl mb-6">
+//                 <Text className="text-[#0D9F70] mb-2 text-base font-pbold">Description</Text>
+//                 <Text className="text-gray-700 font-pregular leading-5">{selectedJob.description}</Text>
+//               </View>
+
+//               <View className="bg-gray-50 p-4 rounded-2xl mb-6">
+//                 <Text className="text-[#0D9F70] mb-3 text-base font-pbold">Job Details</Text>
+
+//                 <View className="flex-row items-center mb-4">
+//                   <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
+//                     <DollarSign size={18} color="#0D9F70" />
+//                   </View>
+//                   <View className="ml-3">
+//                     <Text className="text-gray-500 text-xs font-pregular">Payment</Text>
+//                     <Text className="text-gray-800 font-pmedium">
+//                       {formatCurrency(selectedJob.amount, selectedJob.currency)} •{" "}
+//                       {selectedJob.payment_type === "hourly" ? "Hourly rate" : "Project budget"}
+//                     </Text>
+//                   </View>
+//                 </View>
+
+//                 <View className="flex-row items-center mb-4">
+//                   <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
+//                     <Clock size={18} color="#0D9F70" />
+//                   </View>
+//                   <View className="ml-3">
+//                     <Text className="text-gray-500 text-xs font-pregular">Time Required</Text>
+//                     <Text className="text-gray-800 font-pmedium">
+//                       {selectedJob.time_required} {selectedJob.time_unit}
+//                     </Text>
+//                   </View>
+//                 </View>
+
+//                 {selectedJob.location_address && (
+//                   <View className="flex-row items-center mb-4">
+//                     <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
+//                       <MapPin size={18} color="#0D9F70" />
+//                     </View>
+//                     <View className="ml-3">
+//                       <Text className="text-gray-500 text-xs font-pregular">Location</Text>
+//                       <Text className="text-gray-800 font-pmedium">{selectedJob.location_address}</Text>
+//                     </View>
+//                   </View>
+//                 )}
+
+//                 <View className="flex-row items-center mb-4">
+//                   <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
+//                     <Award size={18} color="#0D9F70" />
+//                   </View>
+//                   <View className="ml-3">
+//                     <Text className="text-gray-500 text-xs font-pregular">Skill Level</Text>
+//                     <Text className="text-gray-800 font-pmedium capitalize">
+//                       {selectedJob.skill_level} {getSkillLevelIcon(selectedJob.skill_level)}
+//                     </Text>
+//                   </View>
+//                 </View>
+
+//                 <View className="flex-row items-center">
+//                   <View className="w-10 h-10 rounded-full bg-[#E7F7F1] items-center justify-center">
+//                     <Calendar size={18} color="#0D9F70" />
+//                   </View>
+//                   <View className="ml-3">
+//                     <Text className="text-gray-500 text-xs font-pregular">Posted Date</Text>
+//                     <Text className="text-gray-800 font-pmedium">
+//                       {format(new Date(selectedJob.created_at), "MMMM dd, yyyy")}
+//                     </Text>
+//                   </View>
+//                 </View>
+//               </View>
+
+//               <View className="h-24" />
+//             </ScrollView>
+
+//             <View className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-4">
+//               <TouchableOpacity
+//                 className="bg-[#0D9F70] py-3.5 rounded-xl w-full items-center"
+//                 onPress={() => setSelectedJob(null)}
+//               >
+//                 <Text className="text-white font-pbold">Close</Text>
+//               </TouchableOpacity>
+//             </View>
+//           </Animated.View>
+//         </View>
+//       </Modal>
+//     )
+//   }
+
+//   const EmptyState = () => (
+//     <ScrollView
+//       contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 16 }}
+//       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#0D9F70"]} />}
+//     >
+//       <Briefcase size={48} color="#ccc" />
+//       <Text className="text-xl font-pbold text-gray-800 mb-2 mt-4">
+//         {searchQuery ? "No matching jobs found" : "No jobs available"}
+//       </Text>
+//       <Text className="text-gray-600 text-center mb-6 font-pregular">
+//         {searchQuery ? "Try adjusting your search terms or clear the search" : "Check back later for new opportunities"}
+//       </Text>
+//       {searchQuery && (
+//         <TouchableOpacity className="border border-[#0D9F70] py-3 px-6 rounded-xl" onPress={() => setSearchQuery("")}>
+//           <Text className="text-[#0D9F70] font-pmedium">Clear Search</Text>
+//         </TouchableOpacity>
+//       )}
+//     </ScrollView>
+//   )
+
+//   return (
+//     <View className="flex-1 bg-gray-50">
+//       {/* Header */}
+//       <View className="bg-[#0D9F70] pt-12 pb-6 px-4 rounded-b-3xl shadow-md">
+//         <View className="flex-row items-center justify-center relative">
+//           <TouchableOpacity
+//             onPress={() => navigation.goBack()}
+//             className="absolute left-0 p-2 rounded-full"
+//             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+//           >
+//             <ArrowLeft color="white" size={24} />
+//           </TouchableOpacity>
+//           <Text className="text-white text-xl font-psemibold">Online Jobs</Text>
+//         </View>
+
+//         <View className="mt-4 relative">
+//           <TextInput
+//             placeholder="Search jobs..."
+//             placeholderTextColor="#E7F7F1"
+//             className="bg-white/10 text-white pl-10 pr-4 py-3 rounded-xl border border-white/20"
+//             value={searchQuery}
+//             onChangeText={setSearchQuery}
+//           />
+//           <View className="absolute left-3 top-3">
+//             <Search size={20} color="#E7F7F1" />
+//           </View>
+//         </View>
+//       </View>
+
+//       {loading ? (
+//         <FlatList
+//           data={skeletonArray}
+//           keyExtractor={(_, index) => `skeleton-${index}`}
+//           renderItem={() => <JobSkeleton />}
+//           contentContainerStyle={{ padding: 16 }}
+//         />
+//       ) : error ? (
+//         <View className="flex-1 justify-center items-center p-4">
+//           <Text className="text-red-500 mb-2 font-pmedium">Error loading jobs</Text>
+//           <Text className="text-gray-600 mb-4 font-pregular">{error}</Text>
+//           <TouchableOpacity className="bg-[#0D9F70] px-6 py-3 rounded-xl" onPress={fetchJobs}>
+//             <Text className="text-white font-pmedium">Try Again</Text>
+//           </TouchableOpacity>
+//         </View>
+//       ) : filteredJobs.length === 0 ? (
+//         <EmptyState />
+//       ) : (
+//         <FlatList
+//           data={filteredJobs}
+//           keyExtractor={(item) => item.id}
+//           renderItem={({ item }) => <JobCard job={item} />}
+//           contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
+//           showsVerticalScrollIndicator={false}
+//           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#0D9F70"]} />}
+//         />
+//       )}
+
+//       <JobDetailModal />
+//     </View>
+//   )
+// }
+
+// export default ViewOnlineJobs
+

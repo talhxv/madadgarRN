@@ -12,19 +12,34 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/contexts/AuthContext"
-import { ArrowLeft, Send, Info, MessageCircle, Clock } from "lucide-react-native"
+import {
+  ArrowLeft,
+  Send,
+  Info,
+  MessageCircle,
+  Clock,
+  CheckCircle,
+  Calendar,
+  Camera,
+  Paperclip,
+  X,
+  DollarSign,
+} from "lucide-react-native"
 import { format } from "date-fns"
 import { ProposalDetails } from "@/components/chats/proposal-details"
 import { ChatScreenSkeleton } from "@/components/chats/chat-screen-skeleton"
-import { createChatForProposal, markMessagesAsRead, sendMessage } from "@/lib/chat-service"
-import { JobDetails } from "@/components/chats/job-details" // We'll create this component
+import { createChatForProposal, markMessagesAsRead, sendMessage, uploadChatMedia } from "@/lib/chat-service"
+import { JobDetails } from "@/components/chats/job-details"
+import { AgreementModal } from "@/components/chats/agreement-modal"
+import { MilestonesModal } from "@/components/chats/milestones-modal"
+import * as ImagePicker from "expo-image-picker"
 
 export default function ChatScreen() {
-  // Get parameters from route
   const params = useLocalSearchParams()
   const chatId = params.id as string
   const jobId = params.jobId as string
@@ -33,6 +48,7 @@ export default function ChatScreen() {
   const router = useRouter()
   const { user } = useAuth()
 
+  const [showAgreementModal, setShowAgreementModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sendingMessage, setSendingMessage] = useState(false)
   const [chat, setChat] = useState(null)
@@ -43,13 +59,22 @@ export default function ChatScreen() {
     user_id: null,
   })
   const [proposal, setProposal] = useState(null)
-  const [job, setJob] = useState(null) // Add state for job details
+  const [job, setJob] = useState(null)
   const [showProposalDetails, setShowProposalDetails] = useState(false)
-  const [showJobDetails, setShowJobDetails] = useState(false) // Add state for showing job details
+  const [showJobDetails, setShowJobDetails] = useState(false)
   const [isStartingChat, setIsStartingChat] = useState(false)
   const [isAcceptingProposal, setIsAcceptingProposal] = useState(false)
   const [canSendMessages, setCanSendMessages] = useState(false)
   const [chatStarted, setChatStarted] = useState(false)
+  const [agreementExists, setAgreementExists] = useState(false)
+  const [activityLogs, setActivityLogs] = useState([])
+  const [isMediaPickerVisible, setIsMediaPickerVisible] = useState(false)
+  const [selectedMedia, setSelectedMedia] = useState(null)
+  const [uploadingMedia, setUploadingMedia] = useState(false)
+  const [jobStarted, setJobStarted] = useState(false)
+  const [showMilestonesModal, setShowMilestonesModal] = useState(false)
+  const [agreement, setAgreement] = useState(null)
+  const [showDebugInfo, setShowDebugInfo] = useState(false)
 
   const flatListRef = useRef(null)
   const subscription = useRef(null)
@@ -61,25 +86,21 @@ export default function ChatScreen() {
       if (chatId) {
         fetchChatData()
         setupMessagesSubscription()
-        // Mark messages as read when viewing the chat
         if (chatId) {
           markMessagesAsRead(chatId, user.id).catch((err) => console.error("Error marking messages as read:", err))
         }
       } else if (jobId && proposalId) {
-        // If no chatId but we have job and proposal, try to find or create a chat
         findOrCreateChat()
       }
     }
 
     return () => {
-      // Clean up subscription when component unmounts
       if (subscription.current) {
         supabase.removeChannel(subscription.current)
       }
     }
   }, [chatId, jobId, proposalId, user])
 
-  // Check subscription status periodically
   useEffect(() => {
     if (!chatId || !user) return
 
@@ -88,12 +109,21 @@ export default function ChatScreen() {
         console.log("Subscription not found, reconnecting...")
         setupMessagesSubscription()
       }
-    }, 30000) // Check every 30 seconds
+    }, 30000)
 
     return () => clearInterval(checkSubscription)
   }, [chatId, user])
 
-  // Update the findOrCreateChat function to use the new service function
+  useEffect(() => {
+    if (proposal?.status === "accepted" && agreementExists) {
+      if (chat && chat.agreement_start_date) {
+        const startDate = new Date(chat.agreement_start_date)
+        const now = new Date()
+        setJobStarted(now >= startDate)
+      }
+    }
+  }, [proposal, agreementExists, chat])
+
   const findOrCreateChat = async () => {
     try {
       setLoading(true)
@@ -105,13 +135,25 @@ export default function ChatScreen() {
         return
       }
 
-      // Make sure we're passing the parameters in the correct order
-      // jobId first, then proposalId
       const newChat = await createChatForProposal(jobId, proposalId, user.id)
 
       if (newChat) {
         console.log("Chat found or created:", newChat)
-        // Update route params with new chat ID
+
+        // Check if user is job owner
+        const isJobOwner = user.id === newChat.job_owner_id
+
+        // Set initial chat state
+        if (isJobOwner) {
+          console.log("User is job owner - should see Start Chat button")
+          setChatStarted(false)
+          setCanSendMessages(false)
+        } else {
+          console.log("User is proposal owner - waiting for job owner to start chat")
+          setChatStarted(false)
+          setCanSendMessages(false)
+        }
+
         router.replace(`/chat/${newChat.id}?jobId=${jobId}&proposalId=${proposalId}`)
         fetchChatData(newChat.id)
         setupMessagesSubscription(newChat.id)
@@ -135,26 +177,15 @@ export default function ChatScreen() {
     try {
       setLoading(true)
 
-      // Fetch chat data
       const { data: chatData, error: chatError } = await supabase
         .from("chats")
         .select(`
-    *, 
+    *,
     job:job_id(
-      id, 
-      user_id, 
-      title, 
-      description, 
-      images, 
-      payment_type, 
-      amount, 
-      currency, 
-      time_required, 
-      time_unit, 
-      skill_level, 
-      location_address, 
-      required_skills, 
-      status
+      id, user_id, title, description, images, payment_type, amount, currency, time_required, time_unit, skill_level, location_address, required_skills, status
+    ),
+    offline_job:offline_job_id(
+      id, user_id, category_id, title, description, images, availability_type, preferred_start_date, preferred_end_date, location_id, location_address, location_details, expected_budget, currency, professional_certification_required, status, created_at, updated_at
     )
   `)
         .eq("id", id)
@@ -167,34 +198,27 @@ export default function ChatScreen() {
       }
 
       setChat(chatData)
-      setJob(chatData.job) // Store the job details
+      setJob(chatData.offline_job || chatData.job)
 
-      // Check if chat is already started by looking for non-system messages
-      const { data: existingMessages, error: existingMessagesError } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("chat_id", id)
-        .eq("is_system", false)
-        .limit(1)
+      let proposalData = null
+      let proposalError = null
 
-      if (!existingMessagesError && existingMessages && existingMessages.length > 0) {
-        setChatStarted(true)
+      if (chatData.offline_proposal_id) {
+        const { data, error } = await supabase
+          .from("offline_proposals")
+          .select("*")
+          .eq("id", chatData.offline_proposal_id)
+          .single()
+        proposalData = data
+        proposalError = error
+      } else if (chatData.proposal_id) {
+        const { data, error } = await supabase.from("proposals").select("*").eq("id", chatData.proposal_id).single()
+        proposalData = data
+        proposalError = error
       }
-
-      // Determine if user can send messages
-      const isJobOwner = user.id === chatData.job_owner_id
-      setCanSendMessages(isJobOwner || chatStarted)
-
-      // Fetch proposal data
-      const { data: proposalData, error: proposalError } = await supabase
-        .from("proposals")
-        .select("*")
-        .eq("id", chatData.proposal_id)
-        .single()
 
       if (proposalError) {
         console.error("Error fetching proposal:", proposalError)
-        // Create a minimal proposal object if we can't fetch the real one
         if (chatData) {
           setProposal({
             id: chatData.proposal_id,
@@ -208,7 +232,6 @@ export default function ChatScreen() {
       } else {
         setProposal(proposalData)
 
-        // If we need the proposer's name, fetch it separately
         if (proposalData) {
           const { data: proposerData } = await supabase
             .from("profiles")
@@ -217,7 +240,6 @@ export default function ChatScreen() {
             .single()
 
           if (proposerData) {
-            // Add the proposer's name to the proposal object
             setProposal({
               ...proposalData,
               proposer_name: proposerData.full_name,
@@ -226,7 +248,6 @@ export default function ChatScreen() {
         }
       }
 
-      // Fetch messages
       const { data: messagesData, error: messagesError } = await supabase
         .from("messages")
         .select("*")
@@ -236,20 +257,45 @@ export default function ChatScreen() {
       if (messagesError) {
         console.error("Error fetching messages:", messagesError)
       } else {
-        // Don't include system messages in the messages list
-        // They will be handled separately in the UI based on user role
-        const filteredMessages = messagesData.filter((msg) => !msg.is_system) || []
-        setMessages(filteredMessages)
-        console.log("Fetched messages:", filteredMessages.length, filteredMessages)
+        setMessages(messagesData || [])
+        console.log("Fetched messages:", messagesData.length, messagesData)
 
-        // Check if there are any non-system messages to determine if chat has started
-        setChatStarted(filteredMessages.length > 0)
+        // Update how chatStarted is determined - ONLY count non-system messages
+        const nonSystemMessages = messagesData.filter((msg) => !msg.is_system) || []
+        const hasRealMessages = nonSystemMessages.length > 0
 
-        // If job owner, can always send messages. If not job owner, can only send if chat started
-        setCanSendMessages(isJobOwner || filteredMessages.length > 0)
+        console.log("Non-system messages:", nonSystemMessages.length, "Has real messages:", hasRealMessages)
+
+        // For the job owner, we want to show the Start Chat button if there are NO REAL messages
+        // For proposal owner, we need to wait until the job owner has started the chat
+        if (user.id === chatData.job_owner_id) {
+          const isJobOwner = true
+          // Job owner should see "Start Chat" button if there are no real messages
+          setChatStarted(hasRealMessages)
+          // Job owner can always send messages after clicking Start Chat
+          setCanSendMessages(hasRealMessages)
+
+          // Add this debug log
+          console.log("Job owner chat state:", {
+            isJobOwner,
+            hasRealMessages,
+            chatStarted: hasRealMessages,
+            canSendMessages: hasRealMessages,
+          })
+        } else {
+          // Proposal owner needs to wait until there are real messages
+          setChatStarted(hasRealMessages)
+          setCanSendMessages(hasRealMessages)
+
+          console.log("Proposal owner chat state:", {
+            isJobOwner: false,
+            hasRealMessages,
+            chatStarted: hasRealMessages,
+            canSendMessages: hasRealMessages,
+          })
+        }
       }
 
-      // Get profile data for other user
       const otherUserIdToFetch = chatData.job_owner_id === user.id ? chatData.proposal_owner_id : chatData.job_owner_id
 
       console.log("Fetching profile for user:", otherUserIdToFetch)
@@ -268,12 +314,78 @@ export default function ChatScreen() {
         })
         console.log("Found profile:", profileData[0])
       } else {
-        // Fallback if no profile is found
         setOtherUser({
           full_name: `User ${otherUserIdToFetch.substring(0, 4)}`,
           user_id: otherUserIdToFetch,
         })
         console.log("No profile found for user:", otherUserIdToFetch)
+      }
+
+      try {
+        const { data: agreementData, error: agreementError } = await supabase
+          .from("proposal_agreements")
+          .select("*")
+          .eq("proposal_id", proposalId || chatData.proposal_id || chatData.offline_proposal_id)
+          .eq("job_id", jobId || chatData.job_id || chatData.offline_job_id)
+          .eq("chat_id", id)
+          .single()
+
+        if (!agreementError && agreementData) {
+          setAgreementExists(true)
+          setAgreement(agreementData)
+        } else {
+          setAgreementExists(false)
+          setAgreement(null)
+        }
+      } catch (error) {
+        console.error("Error checking for agreement:", error)
+      }
+
+      try {
+        const { data: logsData, error: logsError } = await supabase
+          .from("chat_activity_logs")
+          .select("*")
+          .eq("chat_id", id)
+          .order("created_at", { ascending: true })
+
+        if (!logsError && logsData) {
+          setActivityLogs(logsData)
+        } else {
+          const defaultLogs = []
+          if (proposalData) {
+            defaultLogs.push({
+              id: `default-1`,
+              chat_id: id,
+              user_id: proposalData.user_id,
+              action_type: "proposal_sent",
+              details: "Sent proposal",
+              created_at: proposalData.created_at,
+            })
+
+            if (proposalData.status === "accepted") {
+              defaultLogs.push({
+                id: `default-2`,
+                chat_id: id,
+                user_id: chatData.job_owner_id,
+                action_type: "proposal_accepted",
+                details: "Accepted proposal",
+                created_at: proposalData.updated_at,
+              })
+            } else if (proposalData.status === "rejected") {
+              defaultLogs.push({
+                id: `default-3`,
+                chat_id: id,
+                user_id: chatData.job_owner_id,
+                action_type: "proposal_rejected",
+                details: "Rejected proposal",
+                created_at: proposalData.updated_at,
+              })
+            }
+          }
+          setActivityLogs(defaultLogs)
+        }
+      } catch (error) {
+        console.error("Error fetching activity logs:", error)
       }
     } catch (error) {
       console.error("Error in fetchChatData:", error)
@@ -299,31 +411,24 @@ export default function ChatScreen() {
           (payload) => {
             console.log("Real-time update received:", payload)
 
-            // Only add non-system messages to the messages list
-            if (!payload.new.is_system) {
-              // Replace any temporary message with the real one from the database
-              setMessages((currentMessages) => {
-                // Check if this is a message we sent (replace temp version)
-                if (payload.new.sender_id === user.id) {
-                  return currentMessages.map((msg) =>
-                    msg.id.toString().startsWith("temp-") && msg.content === payload.new.content ? payload.new : msg,
-                  )
-                } else {
-                  // This is a message from the other user, just add it
-                  return [...currentMessages, payload.new]
-                }
-              })
+            setMessages((currentMessages) => {
+              if (payload.new.sender_id === user.id && !payload.new.is_system) {
+                return currentMessages.map((msg) =>
+                  msg.id.toString().startsWith("temp-") && msg.content === payload.new.content ? payload.new : msg,
+                )
+              } else {
+                return [...currentMessages, payload.new]
+              }
+            })
 
-              console.log("Updated messages state with real-time data")
-            }
+            console.log("Updated messages state with real-time data")
 
-            // If job owner sends a message, enable messaging for proposal owner
+            // Only update chat state if it's a real message, not a system message
             if (!chatStarted && !payload.new.is_system) {
               setChatStarted(true)
               setCanSendMessages(true)
             }
 
-            // Mark message as read if user is viewing the chat
             if (payload.new.sender_id !== user.id) {
               markMessagesAsRead(id, user.id).catch((err) => console.error("Error marking messages as read:", err))
             }
@@ -346,42 +451,131 @@ export default function ChatScreen() {
     }
   }
 
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please grant permission to access your media library")
+      return
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+      base64: true,
+    })
+
+    if (!result.canceled) {
+      setSelectedMedia({
+        uri: result.assets[0].uri,
+        base64: result.assets[0].base64,
+        type: "image",
+      })
+    }
+  }
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync()
+
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Please grant permission to access your camera")
+      return
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+      base64: true,
+    })
+
+    if (!result.canceled) {
+      setSelectedMedia({
+        uri: result.assets[0].uri,
+        base64: result.assets[0].base64,
+        type: "image",
+      })
+    }
+  }
+
+  const uploadMedia = async () => {
+    if (!selectedMedia || !selectedMedia.base64) {
+      return null
+    }
+
+    const fileExt = selectedMedia.uri.split(".").pop()
+    return await uploadChatMedia(chatId, user.id, selectedMedia.base64, fileExt)
+  }
+
+  const sendMessageWithMedia = async (chatId, senderId, content, mediaUrl = null, mediaType = null) => {
+    try {
+      const messageData = {
+        chat_id: chatId,
+        sender_id: senderId,
+        content: content,
+        media_url: mediaUrl,
+        media_type: mediaType,
+        created_at: new Date(),
+        read: false,
+      }
+
+      const { data, error } = await supabase.from("messages").insert(messageData).select().single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error("Error in sendMessageWithMedia:", error)
+      return null
+    }
+  }
+
   const handleSendMessage = async () => {
-    if (!messageText.trim() || !chatId || !canSendMessages) return
+    if (!messageText.trim() && !selectedMedia) return
+    if (!chatId || !canSendMessages) return
 
     try {
       setSendingMessage(true)
+      let mediaUrl = null
 
-      // Create a temporary message object for optimistic UI update
+      if (selectedMedia) {
+        setUploadingMedia(true)
+        mediaUrl = await uploadMedia()
+        if (!mediaUrl) {
+          Alert.alert("Error", "Failed to upload media. Please try again.")
+          setUploadingMedia(false)
+          setSendingMessage(false)
+          return
+        }
+        setUploadingMedia(false)
+      }
+
       const tempMessage = {
         id: `temp-${Date.now()}`,
         chat_id: chatId,
         sender_id: user.id,
         content: messageText.trim(),
+        media_url: mediaUrl,
+        media_type: selectedMedia ? "image" : null,
         created_at: new Date().toISOString(),
         read: false,
         is_system: false,
       }
 
-      // Add message to UI immediately (optimistic update)
       setMessages((currentMessages) => [...currentMessages, tempMessage])
 
-      // Clear the input right away for better UX
       setMessageText("")
+      setSelectedMedia(null)
 
-      // Scroll to the new message
       setTimeout(() => scrollToBottom(), 100)
 
-      // Then send to database
-      const result = await sendMessage(chatId, user.id, tempMessage.content)
+      const result = await sendMessageWithMedia(chatId, user.id, tempMessage.content, mediaUrl, selectedMedia?.type)
 
       if (!result) {
         throw new Error("Failed to send message")
       }
 
-      console.log("Message sent successfully")
-
-      // If this is the first non-system message, mark chat as started
       if (!chatStarted) {
         setChatStarted(true)
         setCanSendMessages(true)
@@ -390,10 +584,35 @@ export default function ChatScreen() {
       console.error("Error sending message:", error)
       Alert.alert("Error", "Failed to send message. Please try again.")
 
-      // If there was an error, revert the optimistic update
       setMessages((currentMessages) => currentMessages.filter((msg) => !msg.id.toString().startsWith("temp-")))
     } finally {
       setSendingMessage(false)
+    }
+  }
+
+  const addActivityLog = async (actionType, details) => {
+    try {
+      const newLog = {
+        chat_id: chatId,
+        user_id: user.id,
+        action_type: actionType,
+        details: details,
+        created_at: new Date().toISOString(),
+      }
+
+      setActivityLogs((current) => [
+        ...current,
+        {
+          id: `temp-${Date.now()}`,
+          ...newLog,
+        },
+      ])
+
+      const { error } = await supabase.from("chat_activity_logs").insert(newLog)
+
+      if (error) throw error
+    } catch (error) {
+      console.error("Error adding activity log:", error)
     }
   }
 
@@ -401,7 +620,7 @@ export default function ChatScreen() {
     try {
       setIsStartingChat(true)
 
-      // Send a system message that chat has been started
+      // Send the system message
       const { error } = await supabase.from("messages").insert({
         chat_id: chatId,
         sender_id: user.id,
@@ -413,7 +632,7 @@ export default function ChatScreen() {
 
       if (error) throw error
 
-      // Send the first actual message to initiate the chat
+      // This is important - send an actual first message so chatStarted becomes true
       const result = await sendMessage(
         chatId,
         user.id,
@@ -424,8 +643,12 @@ export default function ChatScreen() {
         throw new Error("Failed to send initial message")
       }
 
+      // Explicitly set these states
       setChatStarted(true)
       setCanSendMessages(true)
+
+      // Refresh messages to show the new ones
+      fetchChatData()
     } catch (error) {
       console.error("Error starting chat:", error)
       Alert.alert("Error", "Failed to start chat. Please try again.")
@@ -435,45 +658,8 @@ export default function ChatScreen() {
   }
 
   const acceptProposal = async () => {
-    if (!proposal || !chat) return
-
-    try {
-      setIsAcceptingProposal(true)
-
-      // Update proposal status
-      const { error: updateError } = await supabase
-        .from("proposals")
-        .update({ status: "accepted" })
-        .eq("id", proposal.id)
-
-      if (updateError) throw updateError
-
-      // Send a system message about proposal acceptance
-      const { error: messageError } = await supabase.from("messages").insert({
-        chat_id: chatId,
-        sender_id: user.id,
-        content: "Proposal has been accepted! Work can now begin.",
-        created_at: new Date(),
-        read: false,
-        is_system: true,
-      })
-
-      if (messageError) {
-        console.error("Error creating system message:", messageError)
-        throw messageError
-      }
-
-      // Refresh proposal data
-      const { data: updatedProposal } = await supabase.from("proposals").select("*").eq("id", proposal.id).single()
-
-      setProposal(updatedProposal)
-      setShowProposalDetails(false)
-    } catch (error) {
-      console.error("Error accepting proposal:", error)
-      Alert.alert("Error", "Failed to accept proposal. Please try again.")
-    } finally {
-      setIsAcceptingProposal(false)
-    }
+    await addSystemMessage("Opening agreement creation form...")
+    setShowAgreementModal(true)
   }
 
   const scrollToBottom = () => {
@@ -485,14 +671,70 @@ export default function ChatScreen() {
   const renderMessage = ({ item }) => {
     const isMyMessage = item.sender_id === user.id
 
+    if (item.is_system) {
+      let bgColor = "bg-gray-100"
+      let textColor = "text-gray-700"
+
+      if (item.content.includes("proposal") && item.content.includes("submitted")) {
+        bgColor = "bg-blue-50"
+        textColor = "text-blue-700"
+      } else if (item.content.includes("accepted")) {
+        bgColor = "bg-green-50"
+        textColor = "text-green-700"
+      } else if (item.content.includes("rejected")) {
+        bgColor = "bg-red-50"
+        textColor = "text-red-700"
+      } else if (item.content.includes("agreement")) {
+        bgColor = "bg-purple-50"
+        textColor = "text-purple-700"
+      }
+
+      return (
+        <View className="my-2 px-4">
+          <View className={`${bgColor} py-2 px-4 rounded-full self-center`}>
+            <Text className={`${textColor} text-xs text-center`}>{item.content}</Text>
+          </View>
+        </View>
+      )
+    }
+
     return (
       <View className={`mb-3 max-w-[80%] ${isMyMessage ? "self-end" : "self-start"}`}>
         <View
-          className={`p-3 rounded-xl ${isMyMessage ? "bg-[#0D9F70] rounded-tr-none" : "bg-gray-100 rounded-tl-none"}`}
+          className={`p-3 ${
+            isMyMessage ? "bg-[#0D9F70] rounded-3xl rounded-br-none" : "bg-gray-100 rounded-3xl rounded-bl-none"
+          }`}
+          style={{
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.1,
+            shadowRadius: 1,
+          }}
         >
-          <Text className={`${isMyMessage ? "text-white" : "text-gray-800"}`}>{item.content}</Text>
+          {item.media_url && item.media_type === "image" && (
+            <TouchableOpacity
+              onPress={() => {
+                // You could add a full-screen image viewer here
+              }}
+              className="mb-2"
+            >
+              <Image
+                source={{ uri: item.media_url }}
+                style={{
+                  width: "100%",
+                  aspectRatio: 1.33, // 4:3 aspect ratio, adjust as needed
+                  borderRadius: 8,
+                }}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+          )}
+
+          {item.content && item.content.length > 0 && (
+            <Text className={`${isMyMessage ? "text-white" : "text-gray-800"}`}>{item.content}</Text>
+          )}
         </View>
-        <Text className={`text-xs text-gray-500 mt-1 ${isMyMessage ? "text-right" : "text-left"}`}>
+        <Text className={`text-xs text-gray-500 mt-1 ${isMyMessage ? "text-right mr-2" : "text-left ml-2"}`}>
           {format(new Date(item.created_at), "HH:mm")}
         </Text>
       </View>
@@ -505,8 +747,104 @@ export default function ChatScreen() {
 
   const isJobOwner = user && chat && user.id === chat.job_owner_id
 
+  // Check if there are any non-system messages
+  const nonSystemMessages = messages.filter((msg) => !msg.is_system)
+  const hasOnlySystemMessages = messages.length > 0 && nonSystemMessages.length === 0
+
+  const addSystemMessage = async (content) => {
+    try {
+      const { error } = await supabase.from("messages").insert({
+        chat_id: chatId,
+        sender_id: user.id,
+        content: content,
+        created_at: new Date(),
+        read: false,
+        is_system: true,
+      })
+
+      if (error) throw error
+
+      fetchChatData()
+    } catch (error) {
+      console.error("Error adding system message:", error)
+    }
+  }
+
+  const MediaPickerOverlay = () => {
+    if (!isMediaPickerVisible) return null
+
+    return (
+      <View className="absolute bottom-16 left-0 right-0 bg-white p-4 rounded-t-3xl shadow-lg border border-gray-200">
+        <View className="flex-row justify-between items-center mb-4">
+          <Text className="text-gray-800 text-lg font-pmedium">Attach Media</Text>
+          <TouchableOpacity onPress={() => setIsMediaPickerVisible(false)}>
+            <X size={24} color="#666" />
+          </TouchableOpacity>
+        </View>
+
+        <View className="flex-row justify-around">
+          <TouchableOpacity onPress={pickImage} className="items-center p-3">
+            <View className="bg-gray-100 w-12 h-12 rounded-full items-center justify-center mb-1">
+              <Paperclip size={24} color="#0D9F70" />
+            </View>
+            <Text className="text-gray-700">Gallery</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={takePhoto} className="items-center p-3">
+            <View className="bg-gray-100 w-12 h-12 rounded-full items-center justify-center mb-1">
+              <Camera size={24} color="#0D9F70" />
+            </View>
+            <Text className="text-gray-700">Camera</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }
+
+  const MediaPreview = () => {
+    if (!selectedMedia) return null
+
+    return (
+      <View className="mx-3 mt-2 mb-3">
+        <View className="relative">
+          <Image
+            source={{ uri: selectedMedia.uri }}
+            style={{ width: "100%", height: 120, borderRadius: 8 }}
+            resizeMode="cover"
+          />
+          <TouchableOpacity
+            onPress={() => setSelectedMedia(null)}
+            className="absolute top-2 right-2 bg-black/50 rounded-full p-1"
+          >
+            <X size={16} color="white" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    )
+  }
+
+  const DebugInfo = () => {
+    if (!showDebugInfo) return null
+
+    return (
+      <View className="bg-black/80 p-3 absolute top-20 left-0 right-0 z-50">
+        <Text className="text-white text-xs">isJobOwner: {isJobOwner ? "true" : "false"}</Text>
+        <Text className="text-white text-xs">chatStarted: {chatStarted ? "true" : "false"}</Text>
+        <Text className="text-white text-xs">canSendMessages: {canSendMessages ? "true" : "false"}</Text>
+        <Text className="text-white text-xs">Total messages: {messages.length}</Text>
+        <Text className="text-white text-xs">System messages: {messages.filter((m) => m.is_system).length}</Text>
+        <Text className="text-white text-xs">Non-system messages: {nonSystemMessages.length}</Text>
+        <TouchableOpacity onPress={() => setShowDebugInfo(false)} className="bg-red-500 p-2 rounded mt-2">
+          <Text className="text-white text-center">Close Debug</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-white">
+      <DebugInfo />
+
       <View className="bg-[#0D9F70] pt-12 pb-4 px-4 rounded-b-3xl shadow-md">
         <View className="flex-row items-center">
           <TouchableOpacity
@@ -522,14 +860,46 @@ export default function ChatScreen() {
             </View>
             <View className="flex-1">
               <Text className="text-white text-xl font-pbold">{otherUser?.full_name || "Chat"}</Text>
-              <Text className="text-white text-sm opacity-80">{chat?.job?.title || "Discussion"}</Text>
+              <Text className="text-white text-sm opacity-80">
+                {(chat?.offline_job?.title || chat?.job?.title) ?? "Discussion"}
+              </Text>
             </View>
             <Info size={20} color="white" />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Proposal Banner */}
+      {/* Add permanent Start Chat button for job owners when there are only system messages */}
+      {isJobOwner && hasOnlySystemMessages && (
+        <View className="bg-yellow-50 p-3 mx-4 mt-3 rounded-lg border border-yellow-200">
+          <Text className="text-yellow-800 text-center mb-2">
+            You need to start the chat to communicate with the freelancer
+          </Text>
+          <TouchableOpacity
+            onPress={startChat}
+            disabled={isStartingChat}
+            className="bg-[#0D9F70] py-2 rounded-full flex-row items-center justify-center"
+          >
+            {isStartingChat ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <MessageCircle size={18} color="#fff" className="mr-2" />
+                <Text className="text-white font-pmedium">Start Chat</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Debug button */}
+      <TouchableOpacity
+        onPress={() => setShowDebugInfo(!showDebugInfo)}
+        className="absolute top-2 right-2 z-50 bg-gray-800 p-1 rounded opacity-50"
+      >
+        <Text className="text-white text-xs">Debug</Text>
+      </TouchableOpacity>
+
       {proposal && (
         <TouchableOpacity
           className="mx-4 mt-3 mb-1 p-3 bg-[#E7F7F1] rounded-xl flex-row items-center"
@@ -568,17 +938,15 @@ export default function ChatScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Job Details Modal */}
       {job && (
         <JobDetails
           isVisible={showJobDetails}
           onClose={() => setShowJobDetails(false)}
-          job={job}
+          job={chat?.offline_job || chat?.job}
           isJobOwner={isJobOwner}
         />
       )}
 
-      {/* Proposal Details Modal */}
       {proposal && (
         <ProposalDetails
           isVisible={showProposalDetails}
@@ -589,6 +957,39 @@ export default function ChatScreen() {
           onAccept={acceptProposal}
           isAccepting={isAcceptingProposal}
         />
+      )}
+
+      {isJobOwner && proposal?.status === "pending" && chatStarted && !agreementExists && (
+        <TouchableOpacity
+          className="absolute right-4 bottom-20 z-10 flex-row items-center bg-[#0D9F70] px-5 py-3 rounded-full shadow-lg"
+          onPress={() => setShowAgreementModal(true)}
+          style={{ elevation: 5 }}
+        >
+          <CheckCircle size={24} color="#fff" className="mr-2" />
+          <Text className="text-white font-pbold">Accept Proposal</Text>
+        </TouchableOpacity>
+      )}
+
+      {agreementExists && (
+        <View className="absolute right-4 z-10" style={{ bottom: 85 }}>
+          <TouchableOpacity
+            className="mb-3 flex-row items-center bg-[#0D9F70] px-5 py-3 rounded-full shadow-lg"
+            onPress={() => setShowAgreementModal(true)}
+            style={{ elevation: 5 }}
+          >
+            <Calendar size={24} color="#fff" className="mr-2" />
+            <Text className="text-white font-pbold">Agreement</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="flex-row items-center bg-blue-500 px-5 py-3 rounded-full shadow-lg"
+            onPress={() => setShowMilestonesModal(true)}
+            style={{ elevation: 5 }}
+          >
+            <DollarSign size={24} color="#fff" className="mr-2" />
+            <Text className="text-white font-pbold">{agreement?.is_hourly ? "Time & Payments" : "Milestones"}</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       <KeyboardAvoidingView
@@ -604,11 +1005,10 @@ export default function ChatScreen() {
           contentContainerStyle={{ padding: 16, flexGrow: 1 }}
           onContentSizeChange={scrollToBottom}
           onLayout={scrollToBottom}
-          ListEmptyComponent={() =>
-            messages.length === 0 ? (
+          ListEmptyComponent={() => {
+            return (
               <View className="flex-1 justify-center items-center">
                 {isJobOwner ? (
-                  // For job poster - show start chat button and proposal info
                   <View className="w-full px-4">
                     <View className="bg-gray-100 rounded-xl p-4 mb-4">
                       <Text className="text-gray-700 text-center">
@@ -618,34 +1018,20 @@ export default function ChatScreen() {
                     </View>
 
                     <View className="mt-4 flex-row justify-center space-x-3">
-                      {!chatStarted ? (
-                        <TouchableOpacity
-                          onPress={startChat}
-                          disabled={isStartingChat}
-                          className="bg-[#0D9F70] px-5 py-2.5 rounded-full flex-row items-center"
-                        >
-                          {isStartingChat ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <>
-                              <MessageCircle size={18} color="#fff" className="mr-2" />
-                              <Text className="text-white font-pmedium">Start Chat</Text>
-                            </>
-                          )}
-                        </TouchableOpacity>
-                      ) : proposal?.status !== "accepted" ? (
-                        <TouchableOpacity
-                          onPress={acceptProposal}
-                          disabled={isAcceptingProposal}
-                          className="bg-[#0D9F70] px-5 py-2.5 rounded-full flex-row items-center"
-                        >
-                          {isAcceptingProposal ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text className="text-white font-pmedium">Accept Proposal</Text>
-                          )}
-                        </TouchableOpacity>
-                      ) : null}
+                      <TouchableOpacity
+                        onPress={startChat}
+                        disabled={isStartingChat}
+                        className="bg-[#0D9F70] px-5 py-2.5 rounded-full flex-row items-center"
+                      >
+                        {isStartingChat ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <MessageCircle size={18} color="#fff" className="mr-2" />
+                            <Text className="text-white font-pmedium">Start Chat</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
 
                       <TouchableOpacity
                         onPress={() => setShowProposalDetails(true)}
@@ -656,7 +1042,6 @@ export default function ChatScreen() {
                     </View>
                   </View>
                 ) : (
-                  // For proposal sender - show waiting message with icon
                   <View className="items-center px-4">
                     <View className="w-16 h-16 rounded-full bg-gray-100 items-center justify-center mb-4">
                       <Clock size={24} color="#0D9F70" />
@@ -674,9 +1059,11 @@ export default function ChatScreen() {
                   </View>
                 )}
               </View>
-            ) : null
-          }
+            )
+          }}
         />
+
+        <MediaPreview />
 
         <View className="border-t border-gray-100 p-3">
           {!canSendMessages && !isJobOwner ? (
@@ -697,11 +1084,22 @@ export default function ChatScreen() {
                 maxLength={500}
                 editable={canSendMessages}
               />
+
+              {/* Only show media button if the user can send messages */}
+              {canSendMessages && (
+                <TouchableOpacity
+                  onPress={() => setIsMediaPickerVisible(true)}
+                  className="ml-2 p-2 rounded-full bg-gray-300"
+                >
+                  <Paperclip size={20} color="#0D9F70" />
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
                 onPress={handleSendMessage}
-                disabled={!messageText.trim() || sendingMessage || !canSendMessages}
+                disabled={(!messageText.trim() && !selectedMedia) || sendingMessage || !canSendMessages}
                 className={`ml-2 p-2 rounded-full ${
-                  messageText.trim() && canSendMessages ? "bg-[#0D9F70]" : "bg-gray-300"
+                  (messageText.trim() || selectedMedia) && canSendMessages ? "bg-[#0D9F70]" : "bg-gray-300"
                 }`}
               >
                 {sendingMessage ? <ActivityIndicator size="small" color="#fff" /> : <Send color="#fff" size={20} />}
@@ -710,6 +1108,49 @@ export default function ChatScreen() {
           )}
         </View>
       </KeyboardAvoidingView>
+
+      <MediaPickerOverlay />
+
+      <AgreementModal
+        isVisible={showAgreementModal}
+        onClose={() => setShowAgreementModal(false)}
+        chatId={chatId}
+        jobId={job?.id}
+        proposalId={proposal?.id}
+        userId={user?.id}
+        proposal={proposal}
+        chat={chat}
+        isJobOwner={isJobOwner}
+        agreementExists={agreementExists}
+        onAgreementSubmitted={() => {
+          supabase
+            .from("messages")
+            .insert({
+              chat_id: chatId,
+              sender_id: user.id,
+              content: `${isJobOwner ? "Job poster" : "Freelancer"} created and signed the agreement.`,
+              created_at: new Date(),
+              read: false,
+              is_system: true,
+            })
+            .then(() => {
+              fetchChatData()
+              setShowAgreementModal(false)
+            })
+        }}
+      />
+
+      <MilestonesModal
+        isVisible={showMilestonesModal}
+        onClose={() => setShowMilestonesModal(false)}
+        chatId={chatId}
+        jobId={job?.id}
+        proposalId={proposal?.id}
+        isJobOwner={isJobOwner}
+        proposal={proposal}
+        agreement={agreement}
+        onMilestoneAdded={fetchChatData}
+      />
     </SafeAreaView>
   )
 }
