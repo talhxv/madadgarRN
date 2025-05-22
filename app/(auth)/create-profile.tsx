@@ -18,11 +18,18 @@ import { supabase } from "@/supabaseClient"
 import * as ImagePicker from "expo-image-picker"
 import { BlurView } from "expo-blur"
 import { uploadToS3, compareFaces } from "@/lib/aws-config"
+import DateTimePicker from "@react-native-community/datetimepicker"
 
 interface Profile {
     name: string
     dob: Date
     nicNumber: string
+}
+
+// Add this function above your component
+const isValidPakistaniNIC = (nic: string) => {
+    // Regex for 5 digits, dash, 7 digits, dash, 1 digit
+    return /^\d{5}-\d{7}-\d{1}$/.test(nic)
 }
 
 export default function CreateProfileScreen() {
@@ -34,6 +41,7 @@ export default function CreateProfileScreen() {
     const [dateInput, setDateInput] = useState("")
     const [sessionData, setSessionData] = useState<any>(null)
     const [verificationError, setVerificationError] = useState<string | null>(null)
+    const [showDatePicker, setShowDatePicker] = useState(false)
 
     const [profile, setProfile] = useState<Profile>({
         name: "",
@@ -58,23 +66,14 @@ export default function CreateProfileScreen() {
         setSessionData(session)
     }
 
-    const handleDateInput = (text: string) => {
-        setDateInput(text)
-        const cleaned = text.replace(/\D/g, "")
-        if (cleaned.length >= 4) {
-            const month = cleaned.slice(0, 2)
-            const day = cleaned.slice(2, 4)
-            const year = cleaned.slice(4, 8)
-
-            if (cleaned.length >= 4 && cleaned.length < 8) {
-                setDateInput(`${month}/${day}/${year}`)
-            } else if (cleaned.length >= 8) {
-                const date = new Date(`${year}-${month}-${day}`)
-                if (!isNaN(date.getTime())) {
-                    setDateInput(`${month}/${day}/${year}`)
-                    setProfile({ ...profile, dob: date })
-                }
-            }
+    const handleDateChange = (event: any, selectedDate?: Date) => {
+        setShowDatePicker(false)
+        if (selectedDate) {
+            setProfile({ ...profile, dob: selectedDate })
+            const month = String(selectedDate.getMonth() + 1).padStart(2, "0")
+            const day = String(selectedDate.getDate()).padStart(2, "0")
+            const year = selectedDate.getFullYear()
+            setDateInput(`${month}/${day}/${year}`)
         }
     }
 
@@ -182,7 +181,7 @@ export default function CreateProfileScreen() {
     const renderProgressDots = () => (
         <View className="flex-row justify-center space-x-3 mb-2">
             {[1, 2, 3, 4].map((dotStep) => (
-                <View key={dotStep} className={`w-3 h-3 mr-3 rounded-full ${step >= dotStep ? "bg-mdgreen" : "bg-gray-300"}`} />
+                <View key={dotStep} className={`w-3 h-3 mr-3 rounded-full ${step >= dotStep ? "bg-[#0D9F6F]" : "bg-gray-300"}`} />
             ))}
         </View>
     )
@@ -203,7 +202,7 @@ export default function CreateProfileScreen() {
                         </View>
 
                         <TouchableOpacity
-                            className="bg-mdgreen rounded-xl py-4 mt-6"
+                            className="bg-[#0D9F6F] rounded-xl py-4 mt-6"
                             onPress={() => (profile.name ? setStep(2) : Alert.alert("Required", "Please enter your full name"))}
                         >
                             <Text className="text-white text-center font-psemibold text-lg">Next</Text>
@@ -216,32 +215,59 @@ export default function CreateProfileScreen() {
                     <View>
                         <View className="mb-4">
                             <Text className="text-gray-700 mb-2 font-psemibold">Date of Birth</Text>
-                            <TextInput
+                            <TouchableOpacity
                                 className="bg-white/80 rounded-xl px-4 py-3"
-                                placeholder="MM/DD/YYYY"
-                                value={dateInput}
-                                onChangeText={handleDateInput}
-                                maxLength={10}
-                                keyboardType="numeric"
-                            />
+                                onPress={() => setShowDatePicker(true)}
+                            >
+                                <Text className={`text-base ${dateInput ? "text-black" : "text-gray-400"}`}>
+                                    {dateInput || "MM/DD/YYYY"}
+                                </Text>
+                            </TouchableOpacity>
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={profile.dob || new Date()}
+                                    mode="date"
+                                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                                    onChange={handleDateChange}
+                                    maximumDate={new Date()}
+                                />
+                            )}
                         </View>
-
                         <View className="mb-4">
                             <Text className="text-gray-700 mb-2 font-psemibold">NIC Number</Text>
                             <TextInput
                                 className="bg-white/80 rounded-xl px-4 py-3"
                                 placeholder="Enter your NIC number"
                                 value={profile.nicNumber}
-                                onChangeText={(value) => setProfile({ ...profile, nicNumber: value })}
+                                onChangeText={(value) => {
+                                    // Remove all non-digits
+                                    let digits = value.replace(/\D/g, "")
+                                    // Limit to 13 digits
+                                    digits = digits.slice(0, 13)
+                                    // Auto-insert dashes: 5 digits, dash, 7 digits, dash, 1 digit
+                                    let formatted = digits
+                                    if (digits.length > 5) {
+                                        formatted = digits.slice(0, 5) + "-" + digits.slice(5)
+                                    }
+                                    if (digits.length > 12) {
+                                        formatted = formatted.slice(0, 13) + "-" + formatted.slice(13)
+                                    }
+                                    setProfile({ ...profile, nicNumber: formatted })
+                                }}
+                                keyboardType="numeric"
+                                maxLength={15}
                             />
                         </View>
-
                         <View className="flex-row justify-between space-x-4 mt-6">
                             <TouchableOpacity
-                                className="flex-1 bg-mdgreen rounded-xl py-4"
+                                className="flex-1 bg-[#0D9F6F] rounded-xl py-4"
                                 onPress={() => {
                                     if (!dateInput || !profile.nicNumber) {
                                         Alert.alert("Required", "Please fill in all fields")
+                                        return
+                                    }
+                                    if (!isValidPakistaniNIC(profile.nicNumber)) {
+                                        Alert.alert("Invalid NIC", "Please enter a valid Pakistani NIC number (e.g. 12345-1234567-1)")
                                         return
                                     }
                                     setStep(3)
@@ -300,15 +326,15 @@ export default function CreateProfileScreen() {
                             </View>
                         </View>
 
-                        <TouchableOpacity
-                            className="bg-mdgreen rounded-xl py-4 mt-4"
-                            onPress={handleCreateProfile}
-                            disabled={loading || !nicImage || !selfieImage}
-                        >
-                            <Text className="text-white text-center font-psemibold text-lg">
-                                {loading ? "Verifying..." : "Verify & Create"}
-                            </Text>
-                        </TouchableOpacity>
+                  <TouchableOpacity
+    className={`rounded-xl py-8 mt-36 ${loading || !nicImage || !selfieImage ? "bg-gray-300" : "bg-[#0D9F6F]"}`}
+    onPress={handleCreateProfile}
+    disabled={loading || !nicImage || !selfieImage}
+>
+    <Text className={`text-center font-psemibold text-lg ${loading || !nicImage || !selfieImage ? "text-gray-700" : "text-white"}`}>
+        {loading ? "Verifying..." : "Verify & Create"}
+    </Text>
+</TouchableOpacity>
                     </View>
                 )
 
@@ -316,7 +342,7 @@ export default function CreateProfileScreen() {
                 return (
                     <View>
                         <TouchableOpacity
-                            className="bg-mdgreen rounded-xl py-4 mt-6"
+                            className="bg-[#0D9F6F] rounded-xl py-4 mt-6"
                             onPress={() => router.replace("/(tabs)/Home")}
                         >
                             <Text className="text-white text-center font-psemibold text-lg">Proceed to Home</Text>

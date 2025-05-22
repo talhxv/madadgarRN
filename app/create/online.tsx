@@ -365,7 +365,7 @@ const OnlineJobCreationScreen: React.FC = () => {
 
             // 3. Use router to navigate instead of navigation
             router.push({
-                pathname: "/job-success",
+                pathname: "/Home",
                 params: { jobId: data[0].id },
             });
         } catch (error) {
@@ -627,38 +627,52 @@ const OnlineJobCreationScreen: React.FC = () => {
                 </View>
 
                 {/* Amount */}
-                <View className="mt-6">
+                <View className="mt-6 flex-row items-center">
                     <Text className="text-lg font-psemibold mb-1">
                         {jobDetails.paymentType === "hourly" ? "Hourly Rate" : "Project Budget"}
                     </Text>
-                    <View className="flex-row items-center">
-                        <TextInput
-                            className="bg-gray-100 rounded-lg p-3 text-gray-600 flex-1"
-                            placeholder="0.00"
-                            keyboardType="numeric"
-                            value={jobDetails.amount}
-                            onChangeText={(text) => setJobDetails({ ...jobDetails, amount: text })}
-                        />
-                        <View className="ml-2 bg-gray-100 rounded-lg p-3 w-24">
-                            <Text className="text-gray-600 text-center">PKR</Text>
-                        </View>
+                    <TouchableOpacity
+                        onPress={() => Alert.alert("Estimated Budget", "This is your estimated budget for the job. The final amount may change after negotiations.")}
+                        className="ml-2"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                        <Ionicons name="information-circle-outline" size={16} color="#888" />
+                    </TouchableOpacity>
+                </View>
+                <View className="flex-row items-center">
+                    <TextInput
+                        className="bg-gray-100 rounded-lg p-3 text-gray-600 flex-1"
+                        placeholder="0.00"
+                        keyboardType="numeric"
+                        value={jobDetails.amount}
+                        onChangeText={(text) => setJobDetails({ ...jobDetails, amount: text })}
+                    />
+                    <View className="ml-2 bg-gray-100 rounded-lg p-3 w-24">
+                        <Text className="text-gray-600 text-center">PKR</Text>
                     </View>
                 </View>
 
                 {/* Time Required */}
-                <View className="mt-6">
+                <View className="mt-6 flex-row items-center">
                     <Text className="text-lg font-psemibold mb-1">Time Required</Text>
-                    <View className="flex-row items-center">
-                        <TextInput
-                            className="bg-gray-100 rounded-lg p-3 text-gray-600 flex-1"
-                            placeholder="e.g. 2"
-                            keyboardType="numeric"
-                            value={jobDetails.timeRequired}
-                            onChangeText={(text) => setJobDetails({ ...jobDetails, timeRequired: text })}
-                        />
-                        <View className="ml-2 bg-gray-100 rounded-lg p-3 w-24">
-                            <Text className="text-gray-600 text-center">{jobDetails.timeUnit}</Text>
-                        </View>
+                    <TouchableOpacity
+                        onPress={() => Alert.alert("Estimated Time Required", "This is your estimated time required for the job. The final duration may change after negotiations.")}
+                        className="ml-2"
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                        <Ionicons name="information-circle-outline" size={16} color="#888" />
+                    </TouchableOpacity>
+                </View>
+                <View className="flex-row items-center">
+                    <TextInput
+                        className="bg-gray-100 rounded-lg p-3 text-gray-600 flex-1"
+                        placeholder="e.g. 2"
+                        keyboardType="numeric"
+                        value={jobDetails.timeRequired}
+                        onChangeText={(text) => setJobDetails({ ...jobDetails, timeRequired: text })}
+                    />
+                    <View className="ml-2 bg-gray-100 rounded-lg p-3 w-24">
+                        <Text className="text-gray-600 text-center">{jobDetails.timeUnit}</Text>
                     </View>
                 </View>
                 {/* Skills Required */}
@@ -875,34 +889,40 @@ const OnlineJobCreationScreen: React.FC = () => {
         switch (step) {
             case 1:
                 return (
-                    <View className="flex-1 px-6">
-                        <Text className="text-lg font-psemibold mb-4">Select a Category</Text>
-                        <TextInput
-                            className="bg-gray-100 rounded-lg p-3 text-gray-600 mb-4"
-                            placeholder="Search categories..."
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                        />
-                        <FlatList
-                            data={searchQuery ? filteredCategories : topCategories}
-                            keyExtractor={(item) => item.id.toString()}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    className={`p-4 mb-2 rounded-lg ${selectedCategory?.id === item.id ? "bg-[#00684A]" : "bg-gray-100"}`}
-                                    onPress={() => handleCategorySelect(item)}
-                                >
-                                    <Text className={`font-pmedium ${selectedCategory?.id === item.id ? "text-white" : "text-gray-600"}`}>
-                                        {item.name}
-                                    </Text>
-                                </TouchableOpacity>
-                            )}
-                        />
-                        <View className="mx-6 mt-auto mb-8">
-                            <TouchableOpacity className="bg-[#0D9F6F] rounded-lg p-4 items-center" onPress={handleNext}>
-                                <Text className="text-white font-psemibold text-lg">Next</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                   <View className="flex-1 px-6">
+        <Text className="text-lg font-psemibold mb-4">Select a Category</Text>
+        <TextInput
+            className="bg-gray-100 rounded-lg p-3 text-gray-600 mb-4"
+            placeholder="Search categories..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+        />
+        {/* Add this block for the heading */}
+        {!searchQuery && (
+            <Text className="text-base font-pmediumitalic mb-2 text-gray-700">
+                Popular Categories
+            </Text>
+        )}
+        <FlatList
+            data={searchQuery ? filteredCategories : topCategories}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={({ item }) => (
+                <TouchableOpacity
+                    className={`p-4 mb-2 rounded-lg ${selectedCategory?.id === item.id ? "bg-[#00684A]" : "bg-gray-100"}`}
+                    onPress={() => handleCategorySelect(item)}
+                >
+                    <Text className={`font-pmedium ${selectedCategory?.id === item.id ? "text-white" : "text-gray-600"}`}>
+                        {item.name}
+                    </Text>
+                </TouchableOpacity>
+            )}
+        />
+        <View className="mx-6 mt-auto mb-8">
+            <TouchableOpacity className="bg-[#0D9F6F] rounded-lg p-4 items-center" onPress={handleNext}>
+                <Text className="text-white font-psemibold text-lg">Next</Text>
+            </TouchableOpacity>
+        </View>
+    </View>
                 );
             case 2:
                 return renderJobDetailsStep();

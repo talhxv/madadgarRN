@@ -1,11 +1,12 @@
-import {SplashScreen, Stack} from "expo-router";
-import {StatusBar} from 'expo-status-bar';
-import {useFonts} from "expo-font";
-import {useEffect} from "react";
+import { SplashScreen, Stack, useRouter, useSegments } from "expo-router";
+import { StatusBar } from 'expo-status-bar';
+import { useFonts } from "expo-font";
+import { useEffect } from "react";
 import "../global.css";
-import {ModalProvider} from "@/contexts/ModalContext";
-import {AuthProvider} from "@/contexts/AuthContext"; // Import the AuthProvider
+import { ModalProvider } from "@/contexts/ModalContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import CreateModal from "@/components/CreateModal";
+import { StripeProvider } from '@stripe/stripe-react-native';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -31,6 +32,9 @@ export default function RootLayout() {
         "Poppins-SemiBoldItalic": require("../assets/fonts/Poppins-SemiBoldItalic.ttf"),
     });
 
+    const router = useRouter();
+    const segments = useSegments();
+
     useEffect(() => {
         if (error) throw error;
 
@@ -44,36 +48,42 @@ export default function RootLayout() {
     }
 
     return (
-        <AuthProvider> {/* Wrap everything with AuthProvider */}
-            <ModalProvider>
-                <StatusBar style="light" />
-                <Stack screenOptions={{
-                    headerShown: false,
-                    gestureEnabled: true, // Enable gestures for swiping between screens
-                    cardStyleInterpolator: ({current, next}: { current: any, next: any }) => {
-                        return {
-                            cardStyle: {
-                                opacity: next
-                                    ? next.progress.interpolate({
-                                        inputRange: [0, 1],
-                                        outputRange: [1, 0],
-                                    })
-                                    : current.progress.interpolate({
-                                        inputRange: [0, 1],
-                                        outputRange: [0, 1],
-                                    }),
-                            },
-                        };
-                    },
-                }}>
-                    <Stack.Screen name="index" options={{headerShown: false}}/>
-                    <Stack.Screen name="onboarding" options={{headerShown: false}}/>
-                    <Stack.Screen name="(tabs)" options={{headerShown: false}}/>
-                </Stack>
+        <StripeProvider
+            publishableKey="pk_test_51Piy7a08anrWD70DCwCJWABV2L3JXMYXYiIL6GLOdIkkJ3qULICstEyGdBOEaxucmDUwa0HZntP0LtCj2n114tC5008Qol8QJN"
+            urlScheme="madadgar"
+            merchantIdentifier="merchant.com.madadgar"
+        >
+            <AuthProvider>
+                <ModalProvider>
+                    <StatusBar style="light" />
+                    <Stack screenOptions={{
+                        headerShown: false,
+                        gestureEnabled: true,
+                        cardStyleInterpolator: ({ current, next }: { current: any, next: any }) => {
+                            return {
+                                cardStyle: {
+                                    opacity: next
+                                        ? next.progress.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [1, 0],
+                                        })
+                                        : current.progress.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, 1],
+                                        }),
+                                },
+                            };
+                        },
+                    }}>
+                        <Stack.Screen name="index" options={{ headerShown: false }} />
+                        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+                        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    </Stack>
 
-                {/* Global modal that can appear on any screen */}
-                <CreateModal/>
-            </ModalProvider>
-        </AuthProvider>
+                    {/* Global modal that can appear on any screen */}
+                    <CreateModal />
+                </ModalProvider>
+            </AuthProvider>
+        </StripeProvider>
     );
 }

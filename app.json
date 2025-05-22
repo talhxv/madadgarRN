@@ -5,7 +5,8 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "your-app-scheme",
+    "scheme": "madadgar",
+    "...": "...",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -23,6 +24,17 @@
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+    "intentFilters": [
+      {
+        "action": "VIEW",
+        "data": [
+          {
+            "scheme": "madadgar"
+          }
+        ],
+        "category": ["BROWSABLE", "DEFAULT"]
+      }
+    ],
     "plugins": [
       [
         "expo-image-picker",
@@ -46,7 +58,6 @@
           "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
         }
       ]
-
     ],
     "experiments": {
       "typedRoutes": true

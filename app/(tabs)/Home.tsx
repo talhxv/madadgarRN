@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { View, Text, TouchableOpacity, Image, Animated, Alert, ActivityIndicator, Modal } from "react-native"
+import { View, Text, TouchableOpacity, Image, Animated, Alert, ActivityIndicator, Modal, RefreshControl } from "react-native"
 import { Bell, Link, MapPin, ChevronDown } from "lucide-react-native"
 import { supabase } from "@/supabaseClient"
 import { useRouter } from "expo-router"
@@ -21,6 +21,7 @@ export default function Home() {
     const [categories, setCategories] = useState<any[]>([])
     const [isLoadingCategories, setIsLoadingCategories] = useState(true)
     const [formattedAddress, setFormattedAddress] = useState("Set your location")
+    const [refreshing, setRefreshing] = useState(false);
     const router = useRouter()
     const scrollY = useRef(new Animated.Value(0)).current
 
@@ -105,7 +106,7 @@ export default function Home() {
     }
 
     // Fetch categories from Supabase
-    const fetchCategories = async () => {
+    const fetchCategories = async (): Promise<void> => {
         try {
             setIsLoadingCategories(true)
 
@@ -172,7 +173,7 @@ export default function Home() {
     }
 
     // New function to fetch location data
-    const fetchUserLocation = async () => {
+    const fetchUserLocation = async (): Promise<void> => {
         try {
             if (!user) return
 
@@ -186,6 +187,11 @@ export default function Home() {
                 .single()
 
             if (locationError) {
+                // For first-time users, set a default message instead of showing an error
+                if (locationError.code === 'PGRST116') { // No rows returned error
+                    setFormattedAddress("Set your first location")
+                    return
+                }
                 console.error("Error fetching latest location:", locationError)
             } else if (latestLocation) {
                 console.log("Latest location data:", latestLocation)
@@ -327,6 +333,21 @@ export default function Home() {
         // Call fetchUserLocation when user changes
         if (user) {
             fetchUserLocation()
+        } else {
+            // Try to refresh user data if not available
+            const checkUserSession = async () => {
+                try {
+                    const { data } = await supabase.auth.getSession()
+                    if (data.session) {
+                        // If we have a session but no user in context, refresh the auth context
+                        const { refreshUser } = useAuth()
+                        if (refreshUser) await refreshUser()
+                    }
+                } catch (error) {
+                    console.error("Error checking session:", error)
+                }
+            }
+            checkUserSession()
         }
     }, [user]) // This will run the effect when user changes
 
@@ -355,16 +376,43 @@ export default function Home() {
         )
     }
 
+    // Create a refresh function that calls all your data fetching functions
+    const onRefresh = async () => {
+      try {
+        setRefreshing(true);
+        
+        // Refresh greeting based on time of day
+        setGreetingTime();
+        
+        // Refetch categories
+        await fetchCategories();
+        
+        // Refetch user location if user is available
+        if (user) {
+          await fetchUserLocation();
+        }
+        
+        // You can add more refresh logic here
+        
+      } catch (error) {
+        console.error("Error refreshing data:", error);
+        Alert.alert("Error", "Failed to refresh data. Please try again.");
+      } finally {
+        setRefreshing(false);
+      }
+    };
+
     return (
         <View className="flex-1 bg-white">
             <Animated.View
-                className="px-4 absolute top-0 left-0 right-0 z-10"
+                className="px-4 absolute top-0 left-0 right-0"
                 style={{
                     height: headerHeight,
                     paddingTop: headerPaddingTop,
-                    paddingBottom: 18, // reduced from headerPaddingBottom
+                    paddingBottom: 18,
                     borderBottomRightRadius: 70,
                     backgroundColor: undefined,
+                    zIndex: 10,          // Ensure this is lower than the refresh control's z-index
                 }}
             >
                 <LinearGradient
@@ -444,7 +492,7 @@ export default function Home() {
                                                 latitudeDelta: 0.0922,
                                                 longitudeDelta: 0.0421,
                                             }
-                                            : undefined
+                                            : undefined // Will use default region from LocationPicker
                                     }
                                 />
                             </View>
@@ -467,10 +515,35 @@ export default function Home() {
             {/* Scrollable Content */}
             <Animated.ScrollView
                 className="flex-1"
-                contentContainerStyle={{ paddingTop: 201, paddingBottom: 100 }} // Increased bottom padding
+                contentContainerStyle={{ 
+                  paddingTop: 220,       // Increase from 201 to 220
+                  paddingBottom: 100 
+                }}
                 onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
                 scrollEventThrottle={16}
+                contentInset={{ top: 10 }}  // Add this line to create space for the indicator
+                contentOffset={{ y: -10 }}  // Add this line to prevent initial scroll offset
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    tintColor="#0D9F6F"
+                    colors={["#0D9F6F", "#0F766E"]}
+                    progressBackgroundColor="#ffffff"
+                    progressViewOffset={100}  // Increase this value from 60 to 100
+                    style={{ zIndex: 99 }}    // Increase z-index to ensure it's above everything
+                    android_offsetTop={60} // For Android compatibility
+                  />
+                }
             >
+                {/* You can update your header section to show when data is refreshing
+                This is optional but provides more visual feedback */}
+                {refreshing && (
+                  <View className="absolute top-0 left-0 right-0 items-center bg-[#0D9F6F]/10 py-1">
+                    <Text className="text-[#0D9F6F] font-pmedium">Updating...</Text>
+                  </View>
+                )}
+
                 {/* View Jobs Section */}
                 <View className="px-4">
                     <Text className="text-xl font-psemibold text-[#333333]">View Jobs</Text>
@@ -540,7 +613,13 @@ export default function Home() {
                                 <TouchableOpacity
                                     key={index}
                                     className="w-[48%] aspect-square rounded-3xl p-4 justify-between overflow-hidden"
-                                    onPress={() => router.push(`/category/${category.name.toLowerCase().replace(/\s+/g, "-")}`)}
+                                    onPress={() => {
+                                        if (category.type === "online") {
+                                            router.push("/view/online-jobs")
+                                        } else if (category.type === "offline") {
+                                            router.push("/view/offline-jobs")
+                                        }
+                                    }}
                                 >
                                     <LinearGradient
                                         colors={index % 2 === 0 ? ["#0D9F6F", "#0F766E"] : ["#0F766E", "#0D9F6F"]}

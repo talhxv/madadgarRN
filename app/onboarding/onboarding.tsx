@@ -39,7 +39,7 @@ const onboardingData = [
         id: 5,
         background: require('@/assets/onboarding/screenfive/blur5.png'),
         image: require('@/assets/onboarding/screenfive/fifthimage.png'),
-        title: 'Freelance,             Outsource',
+        title: 'Freelance,                               Outsource',
         description: 'Find unique employment opportunities or discover top freelances to get your own tasks done.',
     },
     {

@@ -1,6 +1,10 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import * as ImagePicker from 'expo-image-picker'
+import { decode } from 'base64-arraybuffer'
+import { Image } from 'expo-image'
+import FastImage from 'react-native-fast-image';
 import {
   View,
   Text,
@@ -14,12 +18,14 @@ import {
   Platform,
 } from "react-native"
 import { BlurView } from "expo-blur"
-import { Pencil, ArrowLeft, X, Check, Briefcase, GraduationCap, User, Banknote } from "lucide-react-native"
+import { Pencil, ArrowLeft, X, Check, Briefcase, GraduationCap, User, Banknote, Camera } from "lucide-react-native"
 import { supabase } from "@/supabaseClient"
 import { useRouter } from "expo-router"
 import SkillSelector from "@/components/SkillSelector"
 import { EducationExperienceSection } from "@/components/Experience"
 import { useAuth } from "@/contexts/AuthContext"
+import { FlashList } from "@shopify/flash-list";
+import { MaterialIcons } from '@expo/vector-icons';
 
 interface ProfileData {
   full_name: string | null
@@ -56,6 +62,11 @@ export default function EditProfile() {
   const [experiences, setExperiences] = useState([])
   const [isEducationExperienceChanged, setIsEducationExperienceChanged] = useState(false)
   const [modalAnimation] = useState(new Animated.Value(0))
+  const [profilePicture, setProfilePicture] = useState<string | null>(null)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [portfolioImages, setPortfolioImages] = useState<string[]>([]);
+  const [isUploadingPortfolio, setIsUploadingPortfolio] = useState(false);
+  const MAX_PORTFOLIO_IMAGES = 5;
 
   // Animation for modal
   useEffect(() => {
@@ -83,7 +94,7 @@ export default function EditProfile() {
   const scrollY = useRef(new Animated.Value(0)).current
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 100],
-    outputRange: [260, 75],
+    outputRange: [290, 75],  // Increased from 260 to 290
     extrapolate: "clamp",
   })
   const headerPaddingTop = scrollY.interpolate({
@@ -134,7 +145,17 @@ export default function EditProfile() {
         supabase.from("user_experience").select("*").eq("user_id", user.id).order("start_date", { ascending: false }),
       ])
 
-      if (profileError) console.error("Error fetching profile:", profileError)
+      // Handle "no rows" error gracefully for first-time users
+      if (
+        profileError &&
+        (profileError.code === "PGRST116" ||
+          profileError.message?.includes("multiple (or no) rows returned"))
+      ) {
+        // No extended profile yet, so leave extendedProfileData as undefined/null
+      } else if (profileError) {
+        console.error("Error fetching profile:", profileError)
+      }
+
       if (eduError) console.error("Error fetching education:", eduError)
       if (expError) console.error("Error fetching experience:", expError)
 
@@ -155,6 +176,33 @@ export default function EditProfile() {
       setSelectedSkills(initialSkills)
       setEducations(educationData || [])
       setExperiences(experienceData || [])
+      
+      // Check if avatar_url exists in the extended profile
+      if (extendedProfileData?.avatar_url) {
+        // Get the public URL
+        const { data: publicUrlData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(extendedProfileData.avatar_url);
+          
+        if (publicUrlData) {
+          setProfilePicture(publicUrlData.publicUrl);
+          console.log("Profile picture URL:", publicUrlData.publicUrl);
+        }
+      }
+
+      // Check if portfolio_images exists in the extended profile
+      if (extendedProfileData?.portfolio_images && Array.isArray(extendedProfileData.portfolio_images)) {
+        // Get the public URLs for all portfolio images
+        const portfolioUrls = extendedProfileData.portfolio_images.map(imagePath => {
+          const { data: publicUrlData } = supabase.storage
+            .from('profileportfolio')
+            .getPublicUrl(imagePath);
+          return publicUrlData?.publicUrl || null;
+        }).filter(url => url !== null);
+        
+        setPortfolioImages(portfolioUrls);
+        console.log("Portfolio images loaded:", portfolioUrls.length);
+      }
     } catch (error) {
       console.error("Error fetching user data:", error)
       Alert.alert("Error", "Failed to load profile data. Please try again.")
@@ -175,7 +223,7 @@ export default function EditProfile() {
     try {
       const { data: existingProfile } = await supabase
         .from("extended_profiles")
-        .select("id")
+        .select("id, avatar_url")
         .eq("user_id", user.id)
         .single()
 
@@ -190,6 +238,8 @@ export default function EditProfile() {
             hourly_fee: profile.hourly_fee,
             minimum_visit_fee: profile.minimum_visit_fee,
             skills: selectedSkills,
+            // Keep the existing avatar_url
+            avatar_url: existingProfile.avatar_url || null,
             updated_at: new Date(),
           })
           .eq("user_id", user.id)
@@ -201,6 +251,8 @@ export default function EditProfile() {
           hourly_fee: profile.hourly_fee,
           minimum_visit_fee: profile.minimum_visit_fee,
           skills: selectedSkills,
+          // Add this line to include avatar_url in new profiles
+          avatar_url: null, // Will be updated when user uploads a profile picture
           created_at: new Date(),
           updated_at: new Date(),
         })
@@ -270,24 +322,61 @@ export default function EditProfile() {
           </View>
         </View>
 
-        {/* Loading content */}
-        <View className="flex-1 justify-center items-center px-4 -mt-10">
-          <View className="bg-white w-full rounded-3xl p-6 shadow-md items-center">
-            <ActivityIndicator size="large" color="#0D9F70" />
-            <Text className="text-gray-700 font-pmedium mt-4 text-center">Loading your profile...</Text>
-            <Text className="text-gray-500 text-sm mt-2 text-center">Please wait while we fetch your information</Text>
+        {/* Profile Skeleton */}
+        <View className="flex-1 px-4 -mt-10">
+          <View className="bg-white rounded-3xl p-6 shadow-md items-center">
+            {/* Avatar Skeleton */}
+            <View className="w-20 h-20 rounded-full bg-gray-200 mb-4" />
+            
+            {/* Name Skeleton */}
+            <View className="h-5 w-32 bg-gray-200 rounded-md mb-2" />
+            
+            {/* Phone Skeleton */}
+            <View className="h-4 w-24 bg-gray-200 rounded-md mb-4" />
+            
+            {/* Fees Skeleton */}
+            <View className="flex-row w-full justify-between mt-2">
+              <View className="w-[48%] h-16 bg-gray-200 rounded-xl" />
+              <View className="w-[48%] h-16 bg-gray-200 rounded-xl" />
+            </View>
           </View>
 
-          {/* Skeleton loading UI */}
-          <View className="w-full mt-8">
-            <View className="h-6 bg-gray-200 rounded-md w-1/3 mb-4" />
-            <View className="h-12 bg-gray-200 rounded-md w-full mb-6" />
-
-            <View className="h-6 bg-gray-200 rounded-md w-1/3 mb-4" />
-            <View className="h-24 bg-gray-200 rounded-md w-full mb-6" />
-
-            <View className="h-6 bg-gray-200 rounded-md w-1/3 mb-4" />
-            <View className="h-12 bg-gray-200 rounded-md w-full mb-6" />
+          {/* Personal Info Section Skeleton */}
+          <View className="mt-6 bg-white rounded-2xl p-5">
+            <View className="flex-row items-center mb-4">
+              <View className="w-8 h-8 rounded-full bg-gray-200 mr-3" />
+              <View className="h-6 w-32 bg-gray-200 rounded-md" />
+            </View>
+            
+            <View className="mb-4">
+              <View className="h-4 w-24 bg-gray-200 rounded-md mb-2" />
+              <View className="h-12 bg-gray-200 rounded-xl w-full" />
+            </View>
+            
+            <View className="mb-4">
+              <View className="h-4 w-16 bg-gray-200 rounded-md mb-2" />
+              <View className="h-24 bg-gray-200 rounded-xl w-full" />
+            </View>
+          </View>
+          
+          {/* Skills Section Skeleton */}
+          <View className="mt-6 bg-white rounded-2xl p-5">
+            <View className="flex-row items-center mb-4">
+              <View className="w-8 h-8 rounded-full bg-gray-200 mr-3" />
+              <View className="h-6 w-20 bg-gray-200 rounded-md" />
+            </View>
+            
+            <View className="h-12 bg-gray-200 rounded-xl w-full" />
+          </View>
+          
+          {/* Education Section Skeleton */}
+          <View className="mt-6 bg-white rounded-2xl p-5 mb-6">
+            <View className="flex-row items-center mb-4">
+              <View className="w-8 h-8 rounded-full bg-gray-200 mr-3" />
+              <View className="h-6 w-48 bg-gray-200 rounded-md" />
+            </View>
+            
+            <View className="h-24 bg-gray-200 rounded-xl w-full" />
           </View>
         </View>
       </View>
@@ -298,6 +387,194 @@ export default function EditProfile() {
     inputRange: [0, 1],
     outputRange: [300, 0],
   })
+
+  const handleImageUpload = async () => {
+    if (!user) return;
+    
+    // Request permissions
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant permission to access your photos');
+      return;
+    }
+    
+    // Pick the image
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+      base64: true,
+    });
+    
+    if (!result.canceled && result.assets && result.assets[0].base64) {
+      try {
+        setIsUploadingImage(true);
+        
+        // Create a unique filename
+        const fileExt = result.assets[0].uri.split('.').pop();
+        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+        
+        // Upload image to Supabase using the new "avatars" bucket
+        const { data, error } = await supabase.storage
+          .from('avatars')
+          .upload(fileName, decode(result.assets[0].base64), {
+            contentType: `image/${fileExt}`,
+            upsert: true,
+          });
+          
+        if (error) throw error;
+        
+        // Get the public URL from the new bucket
+        const { data: publicUrlData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(fileName);
+          
+        // Update user profile with the avatar URL
+        const { error: updateError } = await supabase
+          .from('extended_profiles')
+          .update({ avatar_url: fileName })
+          .eq('user_id', user.id);
+          
+        if (updateError) throw updateError;
+        
+        // Update local state
+        setProfilePicture(publicUrlData.publicUrl);
+        
+        Alert.alert('Success', 'Profile picture updated successfully');
+      } catch (error: any) {
+        console.error('Upload error:', error);
+        Alert.alert('Error', error.message || 'Failed to upload profile picture');
+      } finally {
+        setIsUploadingImage(false);
+      }
+    }
+  };
+
+  // Add this new function
+  const handlePortfolioUpload = async () => {
+    if (!user) return;
+    
+    if (portfolioImages.length >= MAX_PORTFOLIO_IMAGES) {
+      Alert.alert('Limit reached', `You can only upload up to ${MAX_PORTFOLIO_IMAGES} portfolio images.`);
+      return;
+    }
+    
+    // Request permissions
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant permission to access your photos');
+      return;
+    }
+    
+    // Pick the image
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+      base64: true,
+    });
+    
+    if (!result.canceled && result.assets && result.assets[0].base64) {
+      try {
+        setIsUploadingPortfolio(true);
+        
+        // Create a unique filename
+        const fileExt = result.assets[0].uri.split('.').pop();
+        const fileName = `${user.id}-portfolio-${Date.now()}.${fileExt}`;
+        
+        // Upload image to Supabase using the profileportfolio bucket
+        const { data, error } = await supabase.storage
+          .from('profileportfolio')
+          .upload(fileName, decode(result.assets[0].base64), {
+            contentType: `image/${fileExt}`,
+            upsert: true,
+          });
+          
+        if (error) throw error;
+        
+        // Get the public URL
+        const { data: publicUrlData } = supabase.storage
+          .from('profileportfolio')
+          .getPublicUrl(fileName);
+        
+        // Fetch current user profile to get existing portfolio images array
+        const { data: existingProfile } = await supabase
+          .from("extended_profiles")
+          .select("portfolio_images")
+          .eq("user_id", user.id)
+          .single();
+        
+        // Create or update the portfolio_images array
+        const portfolioImagesArray = existingProfile?.portfolio_images || [];
+        const updatedPortfolioImages = [...portfolioImagesArray, fileName];
+        
+        // Update user profile with the new portfolio image
+        const { error: updateError } = await supabase
+          .from('extended_profiles')
+          .update({ portfolio_images: updatedPortfolioImages })
+          .eq('user_id', user.id);
+          
+        if (updateError) throw updateError;
+        
+        // Update local state
+        setPortfolioImages(prev => [...prev, publicUrlData.publicUrl]);
+        
+        Alert.alert('Success', 'Portfolio image added successfully');
+      } catch (error: any) {
+        console.error('Upload error:', error);
+        Alert.alert('Error', error.message || 'Failed to upload portfolio image');
+      } finally {
+        setIsUploadingPortfolio(false);
+      }
+    }
+  };
+
+  const handleRemovePortfolioImage = async (index: number) => {
+    if (!user) return;
+    
+    try {
+      // Get the current portfolio images from the database
+      const { data: existingProfile } = await supabase
+        .from("extended_profiles")
+        .select("portfolio_images")
+        .eq("user_id", user.id)
+        .single();
+        
+      if (!existingProfile?.portfolio_images) return;
+      
+      // Get the filename to remove
+      const filenameToRemove = existingProfile.portfolio_images[index];
+      
+      // Remove from storage
+      const { error: deleteError } = await supabase.storage
+        .from('profileportfolio')
+        .remove([filenameToRemove]);
+        
+      if (deleteError) throw deleteError;
+      
+      // Update the array in the database
+      const updatedPortfolioImages = existingProfile.portfolio_images.filter((_, i) => i !== index);
+      
+      const { error: updateError } = await supabase
+        .from('extended_profiles')
+        .update({ portfolio_images: updatedPortfolioImages })
+        .eq('user_id', user.id);
+        
+      if (updateError) throw updateError;
+      
+      // Update local state
+      setPortfolioImages(prev => prev.filter((_, i) => i !== index));
+      
+      Alert.alert('Success', 'Portfolio image removed successfully');
+    } catch (error: any) {
+      console.error('Remove error:', error);
+      Alert.alert('Error', error.message || 'Failed to remove portfolio image');
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -330,14 +607,30 @@ export default function EditProfile() {
           }}
         >
           <View className="w-24 h-24 bg-white rounded-full overflow-hidden shadow-md">
-            <View className="w-full h-full bg-gray-100 items-center justify-center">
-              <Text className="text-2xl text-gray-400 font-pregular">{profile.full_name?.[0] || "U"}</Text>
-            </View>
+            {profilePicture ? (
+              <Image
+                source={{ uri: profilePicture }}
+                style={{ width: '100%', height: '100%' }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <View className="w-full h-full bg-gray-100 items-center justify-center">
+                <Text className="text-2xl text-gray-400 font-pregular">
+                  {profile.full_name?.[0] || "U"}
+                </Text>
+              </View>
+            )}
             <TouchableOpacity
               className="absolute bottom-0 right-0 bg-white p-2 rounded-full border border-gray-200 shadow-sm"
-              onPress={() => Alert.alert("Coming soon", "Photo upload will be available in future updates")}
+              onPress={handleImageUpload}
+              disabled={isUploadingImage}
             >
-              <Pencil size={16} color="#0D9F70" />
+              {isUploadingImage ? (
+                <ActivityIndicator size="small" color="#0D9F70" />
+              ) : (
+                <Camera size={16} color="#0D9F70" />
+              )}
             </TouchableOpacity>
           </View>
 
@@ -345,17 +638,21 @@ export default function EditProfile() {
           <Text className="text-white/80 font-pregular">{formatPhoneNumber(profile.phone_number)}</Text>
         </Animated.View>
 
-        <Animated.View className="flex-row justify-around mt-2 px-4" style={{ opacity: infoOpacity }}>
-          <TouchableOpacity onPress={openModal} className="bg-white/10 px-4 py-2 rounded-xl">
+        <Animated.View className="flex-row justify-between px-6 mt-2" style={{ opacity: infoOpacity }}>
+          <TouchableOpacity onPress={openModal} className="bg-white/10 px-4 py-3 rounded-xl flex-1 mr-3">
             <View className="items-center">
               <Text className="text-white text-xs font-pregular">Hourly Fee</Text>
-              <Text className="text-white font-psemibold">{profile.hourly_fee || 0} PKR</Text>
+              <Text className="text-white font-psemibold" numberOfLines={1} adjustsFontSizeToFit>
+                {profile.hourly_fee?.toLocaleString() || 0} PKR
+              </Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity onPress={openModal} className="bg-white/10 px-4 py-2 rounded-xl">
+          <TouchableOpacity onPress={openModal} className="bg-white/10 px-4 py-3 rounded-xl flex-1">
             <View className="items-center">
               <Text className="text-white text-xs font-pregular">Minimum Visit Fee</Text>
-              <Text className="text-white font-psemibold">{profile.minimum_visit_fee || 0} PKR</Text>
+              <Text className="text-white font-psemibold" numberOfLines={1} adjustsFontSizeToFit>
+                {profile.minimum_visit_fee?.toLocaleString() || 0} PKR
+              </Text>
             </View>
           </TouchableOpacity>
         </Animated.View>
@@ -376,7 +673,7 @@ export default function EditProfile() {
                 <View className="w-8 h-8 rounded-full bg-[#E7F7F1] items-center justify-center mr-3">
                   <User size={16} color="#0D9F70" />
                 </View>
-                <Text className="text-gray-800 font-pbold text-lg">Personal Info</Text>
+                <Text className="text-gray-800 font-pbold text-lg">Psersonal Info</Text>
               </View>
 
               <View className="mb-4">
@@ -436,6 +733,58 @@ export default function EditProfile() {
                 fetchEducationAndExperience={() => fetchAllUserData()}
                 setIsEducationExperienceChanged={setIsEducationExperienceChanged}
               />
+            </View>
+          </View>
+
+          {/* Portfolio Section Card */}
+          <View className="bg-white rounded-2xl shadow-sm mb-6 overflow-hidden border border-gray-100">
+            <View className="p-5">
+              <View className="flex-row items-center mb-4">
+                <View className="w-8 h-8 rounded-full bg-[#E7F7F1] items-center justify-center mr-3">
+                  <MaterialIcons name="work" size={16} color="#0D9F70" />
+                </View>
+                <Text className="text-gray-800 font-pbold text-lg">Portfolio</Text>
+                <Text className="text-gray-400 ml-auto">
+                  {portfolioImages.length}/{MAX_PORTFOLIO_IMAGES}
+                </Text>
+              </View>
+              
+              {/* Portfolio grid */}
+              <View className="flex-row flex-wrap">
+                {portfolioImages.map((imageUrl, index) => (
+                  <View key={index} className="w-[31%] aspect-square m-1 rounded-lg overflow-hidden bg-gray-100 relative">
+                    <Image
+                      source={{ uri: imageUrl }}
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="cover"
+                    />
+                    <TouchableOpacity
+                      className="absolute top-1 right-1 bg-black/50 rounded-full p-1"
+                      onPress={() => handleRemovePortfolioImage(index)}
+                    >
+                      <X size={16} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                
+                {portfolioImages.length < MAX_PORTFOLIO_IMAGES && (
+                  <TouchableOpacity
+                    className="w-[31%] aspect-square m-1 bg-gray-100 rounded-lg items-center justify-center border border-dashed border-gray-300"
+                    onPress={handlePortfolioUpload}
+                    disabled={isUploadingPortfolio}
+                  >
+                    {isUploadingPortfolio ? (
+                      <ActivityIndicator color="#0D9F70" />
+                    ) : (
+                      <MaterialIcons name="add-photo-alternate" size={24} color="#0D9F70" />
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              <Text className="text-gray-500 text-xs mt-3 text-center">
+                Upload up to 5 images showcasing your best work
+              </Text>
             </View>
           </View>
 

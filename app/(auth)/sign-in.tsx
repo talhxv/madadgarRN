@@ -28,12 +28,31 @@ export default function LoginScreen() {
     // Create refs for OTP input fields
     const otpInputRefs = useRef([...Array(6)].map(() => React.createRef()));
 
+    const handlePhoneNumberChange = (value) => {
+        // Remove all non-digit characters
+        let digits = value.replace(/\D/g, '');
+
+        // Remove leading zeros
+        digits = digits.replace(/^0+/, '');
+
+        // Limit to 10 digits (Pakistani mobile number after +92)
+        if (digits.length > 10) {
+            digits = digits.slice(0, 10);
+        }
+
+        setPhoneNumber(digits);
+
+        // Real-time validation
+        if (digits.length !== 10) {
+            setPhoneError('Phone number must be 10 digits after +92');
+        } else {
+            setPhoneError(null);
+        }
+    };
+
     const validatePhoneNumber = (number) => {
-        const cleanNumber = number.replace(/\D/g, '');
-        // Check if the phone number has a valid format after removing the leading zero
-        const withoutLeadingZero = cleanNumber.replace(/^0+/, '');
-        // Simple validation - Pakistan mobile numbers are typically 10 digits after country code
-        return withoutLeadingZero.length >= 10;
+        const cleanNumber = number.replace(/\D/g, '').replace(/^0+/, '');
+        return cleanNumber.length === 10;
     };
 
     const handleSendOTP = async () => {
@@ -67,7 +86,11 @@ export default function LoginScreen() {
                 channel: 'sms',
             });
 
-            if (otpError) throw otpError;
+            if (otpError) {
+                // Handle OTP sending errors without Alert
+                setError(otpError.message);
+                return;
+            }
 
             setStep(2);
 
@@ -79,7 +102,8 @@ export default function LoginScreen() {
         } catch (error) {
             console.error('Login Error:', error);
             setError(error.message);
-            Alert.alert('Error', error.message);
+            // Remove Alert to prevent Twilio warning popup
+            // Alert.alert('Error', error.message);
         } finally {
             setLoading(false);
         }
@@ -106,7 +130,20 @@ export default function LoginScreen() {
                 type: 'sms'
             });
 
-            if (error) throw error;
+            if (error) {
+                // Handle specific OTP errors more gracefully
+                if (error.message.includes('Token has expired') || error.message.includes('invalid')) {
+                    setError('Invalid or expired verification code. Please try again or request a new code.');
+                    // Clear the OTP input
+                    setOtp('');
+                    // Focus on the first OTP input field
+                    if (otpInputRefs.current[0]) {
+                        otpInputRefs.current[0].focus();
+                    }
+                    return;
+                }
+                throw error;
+            }
 
             // Check profile without + to match DB format
             const { data: existingProfile } = await supabase
@@ -128,8 +165,10 @@ export default function LoginScreen() {
 
         } catch (error) {
             console.error('Verification Error:', error);
-            setError(error.message);
-            Alert.alert('Error', error.message);
+            // For other errors, provide a more generic message
+            setError('Verification failed. Please check your connection and try again.');
+            // Don't show Alert, just use the in-app error message
+            // Alert.alert('Error', 'Verification failed. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -170,8 +209,9 @@ export default function LoginScreen() {
                         className="flex-1 ml-2 text-gray-800"
                         placeholder="Enter your phone number"
                         value={phoneNumber}
-                        onChangeText={setPhoneNumber}
+                        onChangeText={handlePhoneNumberChange}
                         keyboardType="phone-pad"
+                        maxLength={10} // Prevent more than 10 digits after +92
                     />
                 </View>
                 {phoneError && (
@@ -180,9 +220,9 @@ export default function LoginScreen() {
             </View>
 
             <TouchableOpacity
-                className={`bg-[#0D9F6F] rounded-xl py-4 mt-6 ${loading ? 'opacity-50' : ''}`}
+                className={`bg-[#0D9F6F] rounded-xl py-4 mt-6 ${loading || phoneError ? 'opacity-50' : ''}`}
                 onPress={handleSendOTP}
-                disabled={loading}
+                disabled={loading || !!phoneError}
             >
                 <Text className="text-white text-center font-psemibold text-lg">
                     {loading ? 'Sending OTP...' : 'Continue'}
@@ -198,6 +238,12 @@ export default function LoginScreen() {
                 Enter the 6-digit code sent to <Text className="font-psemibold">+92 {phoneNumber}</Text>
             </Text>
 
+            {error && (
+                <View className="bg-red-50 p-3 rounded-lg border border-red-200 mb-2">
+                    <Text className="text-red-600 font-pregular text-center">{error}</Text>
+                </View>
+            )}
+
             <View className="flex-row justify-between">
                 {[...Array(6)].map((_, index) => (
                     <TextInput
@@ -205,7 +251,7 @@ export default function LoginScreen() {
                         ref={el => otpInputRefs.current[index] = el}
                         className={`flex-1 bg-white/80 rounded-xl px-4 py-3 text-center text-lg ${
                             index !== 5 ? 'mr-3' : ''
-                        }`}
+                        } ${error ? 'border border-red-300' : ''}`}
                         maxLength={1}
                         keyboardType="number-pad"
                         value={otp[index] || ''}
@@ -216,14 +262,28 @@ export default function LoginScreen() {
             </View>
 
             <TouchableOpacity
-                className={`bg-[#0D9F6F] rounded-xl py-4 mt-6 ${loading ? 'opacity-50' : ''}`}
+                className={`bg-[#0D9F6F] rounded-xl py-4 mt-6 ${loading || otp.length !== 6 ? 'opacity-50' : ''}`}
                 onPress={handleVerifyOTP}
-                disabled={loading}
+                disabled={loading || otp.length !== 6}
             >
                 <Text className="text-white text-center font-psemibold text-lg">
                     {loading ? 'Verifying...' : 'Verify OTP'}
                 </Text>
             </TouchableOpacity>
+
+            <View className="flex-row justify-center mt-4">
+                <Text className="text-gray-600 font-pregular">Didn't receive the code? </Text>
+                <TouchableOpacity 
+                    onPress={() => {
+                        setOtp('');
+                        setError(null);
+                        setStep(1); // Go back to phone input step
+                    }}
+                    disabled={loading}
+                >
+                    <Text className="text-[#0D9F6F] font-psemibold">Resend Code</Text>
+                </TouchableOpacity>
+            </View>
         </View>
     );
 

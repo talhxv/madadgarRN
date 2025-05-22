@@ -8,6 +8,7 @@ import { ArrowLeft, MessageSquare, Clock, CheckCircle2, ArrowUpRight, ArrowDownL
 import { format, isToday, isYesterday, isThisYear } from "date-fns"
 import { useRouter } from "expo-router"
 import { ChatListSkeleton } from "@/components/chats/chat-list-skeleton"
+import { Image } from 'expo-image'
 
 type Chat = {
   id: string
@@ -26,6 +27,7 @@ type Chat = {
   other_user: {
     full_name?: string
     user_id: string
+    avatar_url?: string  // Add this property
   }
   last_message?: {
     content: string
@@ -129,6 +131,22 @@ export default function ChatListScreen() {
             if (!profileError && profiles && profiles.length > 0) {
               profileData = profiles[0]
               console.log("Found profile for user:", otherUserId, profileData)
+              
+              // Add this code to fetch the avatar URL
+              const { data: extendedProfileData, error: extError } = await supabase
+                .from("extended_profiles")
+                .select("avatar_url")
+                .eq("user_id", otherUserId)
+                .single()
+                
+              if (!extError && extendedProfileData?.avatar_url) {
+                // Get the public URL for the avatar
+                const { data: publicUrlData } = supabase.storage
+                  .from('avatars')
+                  .getPublicUrl(extendedProfileData.avatar_url)
+                  
+                profileData.avatar_url = publicUrlData.publicUrl
+              }
             } else {
               console.log("No profile found for user:", otherUserId)
             }
@@ -329,12 +347,21 @@ export default function ChatListScreen() {
         onPress={() => navigateToChat(item)}
       >
         <View className="flex-row items-center">
-          <View className={`w-12 h-12 rounded-full ${avatarBgColor || "bg-gray-100"} items-center justify-center mr-3`}>
-            <Text
-              className={`${proposalState === "Accepted" ? "text-[#0D9F70]" : textColor || "text-gray-500"} font-pbold`}
-            >
-              {getInitials(otherUserName)}
-            </Text>
+          <View className={`w-12 h-12 rounded-full ${avatarBgColor || "bg-gray-100"} items-center justify-center mr-3 overflow-hidden`}>
+            {item.other_user?.avatar_url ? (
+              <Image
+                source={{ uri: item.other_user.avatar_url }}
+                style={{ width: '100%', height: '100%' }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+            ) : (
+              <Text
+                className={`${proposalState === "Accepted" ? "text-[#0D9F70]" : textColor || "text-gray-500"} font-pbold`}
+              >
+                {getInitials(otherUserName)}
+              </Text>
+            )}
           </View>
 
           <View className="flex-1">

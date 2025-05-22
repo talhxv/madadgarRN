@@ -30,11 +30,17 @@ import {
   ExternalLink,
   Eye,
   ImageIcon,
+  Star,
 } from "lucide-react-native"
 import DateTimePicker from "@react-native-community/datetimepicker"
 import { format } from "date-fns"
 import * as ImagePicker from "expo-image-picker"
 import { decode } from "base64-arraybuffer"
+import { StripePaymentHandler } from "@/components/chats/stripe-payment-handler"
+import { PaymentMethodSelector } from "@/components/chats/payment-method-selector"
+import { ReviewModal } from "./review-modal"
+import { ReviewDetailModal } from "./review-detail-modal"
+import { ReviewBadge } from "./review-badge"
 
 // Helper functions for date calculations
 const getStartOfWeek = (date) => {
@@ -59,6 +65,7 @@ export const MilestonesModal = ({
   proposal,
   agreement,
   onMilestoneAdded,
+  chat, // Add chat prop here
 }) => {
   const [milestones, setMilestones] = useState([])
   const [loading, setLoading] = useState(true)
@@ -105,6 +112,19 @@ export const MilestonesModal = ({
 
   const [previewRemainingAmount, setPreviewRemainingAmount] = useState(remainingAmount)
 
+  // New state for payment method selection
+  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false)
+
+  const [allMilestonesCompleted, setAllMilestonesCompleted] = useState(false)
+  const [jobCompleted, setJobCompleted] = useState(false)
+
+  // New states for review system
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [reviews, setReviews] = useState([])
+  const [selectedReview, setSelectedReview] = useState(null)
+  const [showReviewDetailModal, setShowReviewDetailModal] = useState(false)
+  const [hasSubmittedReview, setHasSubmittedReview] = useState(false)
+
   // Animation for the modal
   useEffect(() => {
     if (isVisible) {
@@ -131,6 +151,7 @@ export const MilestonesModal = ({
   useEffect(() => {
     if (isVisible) {
       fetchMilestones()
+      fetchReviews() // Add this to fetch reviews
       console.log("Agreement in MilestonesModal:", agreement)
     }
   }, [isVisible])
@@ -191,9 +212,40 @@ export const MilestonesModal = ({
     setPreviewRemainingAmount(remainingAmount - amountValue)
   }, [amount, remainingAmount])
 
+  useEffect(() => {
+    if (milestones.length > 0 && remainingAmount <= 0) {
+      // Check if all milestones are completed
+      const allCompleted = milestones.every((milestone) => milestone.status === "payment_received")
+      setAllMilestonesCompleted(allCompleted)
+
+      // Check if job is already marked as completed
+      if (allCompleted) {
+        const fetchJobStatus = async () => {
+          try {
+            const { data, error } = await supabase.from("jobs").select("status").eq("id", jobId).single()
+
+            if (error) throw error
+            setJobCompleted(data?.status === "completed")
+          } catch (err) {
+            console.error("Error fetching job status:", err)
+          }
+        }
+
+        fetchJobStatus()
+      }
+    } else {
+      setAllMilestonesCompleted(false)
+    }
+  }, [milestones, remainingAmount])
+
   const fetchMilestones = async () => {
     try {
       setLoading(true)
+
+      if (!chatId) {
+        console.error("Chat ID is missing, cannot fetch milestones")
+        return
+      }
 
       const { data, error } = await supabase
         .from("milestones")
@@ -206,11 +258,21 @@ export const MilestonesModal = ({
       // Process milestones to ensure payment proof URLs are valid
       const processedMilestones =
         data?.map((milestone) => {
-          if (milestone.payment_proof_url) {
-            // Add a cache-busting parameter to force reload
-            milestone.payment_proof_url = `${milestone.payment_proof_url}?t=${new Date().getTime()}`
+          // Ensure all milestone properties have default values if null
+          const processedMilestone = {
+            ...milestone,
+            title: milestone.title || "Untitled Milestone",
+            description: milestone.description || "",
+            amount: milestone.amount || 0,
+            status: milestone.status || "pending",
+            payment_method: milestone.payment_method || null,
           }
-          return milestone
+
+          if (processedMilestone.payment_proof_url) {
+            // Add a cache-busting parameter to force reload
+            processedMilestone.payment_proof_url = `${processedMilestone.payment_proof_url}?t=${new Date().getTime()}`
+          }
+          return processedMilestone
         }) || []
 
       setMilestones(processedMilestones)
@@ -220,6 +282,67 @@ export const MilestonesModal = ({
     } finally {
       setLoading(false)
     }
+  }
+
+  // New function to fetch reviews
+  const fetchReviews = async () => {
+    try {
+      if (!jobId || !proposalId) {
+        console.log("Job ID or Proposal ID missing, cannot fetch reviews")
+        return
+      }
+
+      const { data, error } = await supabase
+        .from("job_reviews")
+        .select("*")
+        .eq("job_id", jobId)
+        .eq("proposal_id", proposalId)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+
+      setReviews(data || [])
+
+      // Check if the current user has already submitted a review
+      if (data && data.length > 0) {
+        const userReview = data.find(
+          (review) =>
+            (isJobOwner && review.reviewer_type === "client") || (!isJobOwner && review.reviewer_type === "freelancer"),
+        )
+        setHasSubmittedReview(!!userReview)
+      } else {
+        setHasSubmittedReview(false)
+      }
+    } catch (error) {
+      console.error("Error fetching reviews:", error)
+    }
+  }
+
+  // New function to handle review submission
+  const handleReviewSubmitted = (txHash) => {
+    fetchReviews()
+    setHasSubmittedReview(true)
+
+    // Add system message to chat
+    supabase
+      .from("messages")
+      .insert({
+        chat_id: chatId,
+        content: `${isJobOwner ? "Client" : "Freelancer"} submitted a blockchain-verified review for this job`,
+        is_system: true,
+        created_at: new Date().toISOString(),
+      })
+      .then(() => {
+        if (onMilestoneAdded) {
+          onMilestoneAdded()
+        }
+      })
+  }
+
+  // New function to view review details
+  const handleViewReview = (review) => {
+    setSelectedReview(review)
+    setShowReviewDetailModal(true)
   }
 
   const addMilestone = async () => {
@@ -396,7 +519,10 @@ export const MilestonesModal = ({
       setUpdating(true)
 
       const milestone = milestones.find((m) => m.id === id)
-      if (!milestone) return
+      if (!milestone) {
+        console.error("Milestone not found:", id)
+        return
+      }
 
       const updateData = {
         status: newStatus,
@@ -413,6 +539,10 @@ export const MilestonesModal = ({
           break
         case "payment_released":
           updateData.payment_released_at = new Date().toISOString()
+          // If this is a Stripe payment, mark it as such
+          if (milestone.payment_method === "stripe") {
+            updateData.payment_method = "stripe"
+          }
           break
         case "payment_received":
           updateData.payment_received_at = new Date().toISOString()
@@ -425,21 +555,23 @@ export const MilestonesModal = ({
 
       // Add system message to chat with appropriate message based on status
       let statusMessage = ""
+      const milestoneTitle = milestone.title || "Unknown milestone"
+
       switch (newStatus) {
         case "accepted":
-          statusMessage = `Milestone "${milestone.title}" was accepted by the freelancer`
+          statusMessage = `Milestone "${milestoneTitle}" was accepted by the freelancer`
           break
         case "completed":
-          statusMessage = `Milestone "${milestone.title}" was marked as completed by the freelancer`
+          statusMessage = `Milestone "${milestoneTitle}" was marked as completed by the freelancer`
           break
         case "payment_released":
-          statusMessage = `Payment for milestone "${milestone.title}" was released by the job poster`
+          statusMessage = `Payment for milestone "${milestoneTitle}" was released by the job poster`
           break
         case "payment_received":
-          statusMessage = `Payment for milestone "${milestone.title}" was confirmed as received by the freelancer`
+          statusMessage = `Payment for milestone "${milestoneTitle}" was confirmed as received by the freelancer`
           break
         default:
-          statusMessage = `Milestone "${milestone.title}" status was updated to ${newStatus}`
+          statusMessage = `Milestone "${milestoneTitle}" status was updated to ${newStatus}`
       }
 
       await supabase.from("messages").insert({
@@ -461,7 +593,7 @@ export const MilestonesModal = ({
       } else if (newStatus === "completed") {
         showNextSteps("Milestone Completed", "You've marked this milestone as completed. Here's what happens next:", [
           "The client will review your work",
-          "Once satisfied, they'll upload payment proof",
+          "Once satisfied, they'll release payment",
           "You'll be notified to confirm payment receipt",
         ])
       } else if (newStatus === "payment_released") {
@@ -521,7 +653,7 @@ export const MilestonesModal = ({
   }
 
   const uploadPaymentProof = async () => {
-    if (!selectedImage || !milestoneToPayFor) {
+    if (!selectedImage || !milestoneToPayFor || !milestoneToPayFor.id) {
       Alert.alert("Error", "No image selected or milestone not specified")
       return
     }
@@ -567,6 +699,7 @@ export const MilestonesModal = ({
         .update({
           payment_proof_url: publicUrl,
           status: "payment_released",
+          payment_method: "manual", // Explicitly set payment method to manual
           payment_released_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -579,9 +712,10 @@ export const MilestonesModal = ({
       }
 
       // Add system message
+      const milestoneTitle = milestoneToPayFor.title || "Unknown milestone"
       await supabase.from("messages").insert({
         chat_id: chatId,
-        content: `Payment proof for milestone "${milestoneToPayFor.title}" was uploaded by the job poster`,
+        content: `Payment proof for milestone "${milestoneTitle}" was uploaded by the job poster`,
         is_system: true,
         created_at: new Date(),
       })
@@ -626,6 +760,61 @@ export const MilestonesModal = ({
       steps,
     })
     setShowNextStepsModal(true)
+  }
+
+  const completeJob = async () => {
+    try {
+      if (!jobId) {
+        Alert.alert("Error", "Job ID is missing")
+        return
+      }
+
+      // Update job status to completed
+      const { error: jobUpdateError } = await supabase
+        .from("jobs")
+        .update({
+          status: "completed",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", jobId)
+
+      if (jobUpdateError) {
+        throw jobUpdateError
+      }
+
+      // Delete other pending proposals for this job
+      const { error: proposalDeleteError } = await supabase
+        .from("proposals")
+        .delete()
+        .eq("job_id", jobId)
+        .not("id", "eq", proposalId)
+
+      if (proposalDeleteError) {
+        console.warn("Error deleting other proposals:", proposalDeleteError)
+      }
+
+      // Add system message to the chat
+      await supabase.from("messages").insert({
+        chat_id: chatId,
+        content: "🎉 The job has been marked as completed! Thank you for using Madadgar.",
+        is_system: true,
+        created_at: new Date().toISOString(),
+        sender_id: chatId, // Using chatId as sender for system message
+      })
+
+      setJobCompleted(true)
+
+      // Show completion message
+      showNextSteps("Job Completed", "Congratulations! This job has been successfully completed.", [
+        "All milestones have been completed and paid",
+        "The job is now marked as complete in your history",
+        "Other proposals for this job have been removed",
+        "You can now leave a review for your experience",
+      ])
+    } catch (error) {
+      console.error("Error completing job:", error)
+      Alert.alert("Error", "Failed to complete the job")
+    }
   }
 
   const getStatusInfo = (status) => {
@@ -693,101 +882,157 @@ export const MilestonesModal = ({
           </View>
         </View>
 
-        {/* Payment proof section - improved with better error handling and UI */}
+        {/* Payment proof section - with special handling for Stripe payments */}
         {milestone.status === "payment_released" && (
           <View className="mb-3 border border-gray-200 rounded-lg p-3 bg-gray-50">
             <View className="flex-row justify-between items-center mb-2">
-              <Text className="text-gray-700 font-pmedium">Payment Proof:</Text>
-
-              {milestone.payment_proof_url ? (
-                <TouchableOpacity
-                  className="bg-purple-100 px-2 py-1 rounded-full flex-row items-center"
-                  onPress={() => viewPaymentProof(milestone.payment_proof_url)}
-                >
-                  <Eye size={14} color="#7E22CE" />
-                  <Text className="ml-1 text-xs text-purple-700">View Proof</Text>
-                </TouchableOpacity>
-              ) : null}
+              <Text className="text-gray-700 font-pmedium">Payment Status:</Text>
             </View>
 
-            {milestone.payment_proof_url ? (
-              <TouchableOpacity
-                onPress={() => viewPaymentProof(milestone.payment_proof_url)}
-                className="relative"
-                activeOpacity={0.8}
-              >
-                <Image
-                  source={{ uri: milestone.payment_proof_url }}
-                  style={{ width: "100%", height: 150, borderRadius: 8 }}
-                  resizeMode="cover"
-                  onError={(e) => {
-                    console.error("Error loading image:", e.nativeEvent.error)
-                    // Attempt to refresh the URL
-                    const refreshedUrl = milestone.payment_proof_url + "?t=" + new Date().getTime()
-                    // You could set a state here to update the URL
-                  }}
-                />
-                <View className="absolute bottom-2 right-2 bg-black/50 rounded-full p-1">
-                  <Eye size={16} color="#fff" />
+            {milestone.payment_method === "stripe" ? (
+              // Stripe payment display
+              <View className="bg-purple-50 p-3 rounded-lg flex-row items-center">
+                <CreditCard size={20} color="#7E22CE" />
+                <View className="ml-2">
+                  <Text className="text-gray-800 font-pmedium">Paid with Stripe</Text>
+                  {milestone.stripe_payment_id && (
+                    <Text className="text-xs text-gray-500">
+                      Transaction ID: {milestone.stripe_payment_id.slice(0, 10)}...
+                    </Text>
+                  )}
+                  {milestone.payment_released_at && (
+                    <Text className="text-xs text-gray-500">
+                      {format(new Date(milestone.payment_released_at), "MMM d, yyyy · h:mm a")}
+                    </Text>
+                  )}
                 </View>
-              </TouchableOpacity>
-            ) : (
-              <View className="items-center justify-center bg-gray-200 h-20 rounded-lg">
-                <ImageIcon size={24} color="#9CA3AF" />
-                <Text className="text-gray-500 text-xs mt-1">Payment proof not available</Text>
               </View>
+            ) : (
+              // Manual payment with proof
+              <>
+                {milestone.payment_proof_url ? (
+                  <TouchableOpacity
+                    onPress={() => viewPaymentProof(milestone.payment_proof_url)}
+                    className="relative"
+                    activeOpacity={0.8}
+                  >
+                    <Image
+                      source={{ uri: milestone.payment_proof_url }}
+                      style={{ width: "100%", height: 150, borderRadius: 8 }}
+                      resizeMode="cover"
+                      onError={(e) => {
+                        console.error("Error loading image:", e.nativeEvent.error)
+                      }}
+                    />
+                    <View className="absolute bottom-2 right-2 bg-black/50 rounded-full p-1">
+                      <Eye size={16} color="#fff" />
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <View className="items-center justify-center bg-gray-200 h-20 rounded-lg">
+                    <ImageIcon size={24} color="#9CA3AF" />
+                    <Text className="text-gray-500 text-xs mt-1">Payment proof not available</Text>
+                  </View>
+                )}
+              </>
             )}
           </View>
         )}
 
         {/* Action buttons based on role and status */}
-        <View className="flex-row mt-2 flex-wrap">
+        <View className="flex-row mt-2 flex-wrap" style={{ zIndex: 5 }}>
           {/* Freelancer actions */}
           {!isJobOwner && milestone.status === "pending" && (
             <TouchableOpacity
-              className="bg-blue-500 px-4 py-2 rounded-full mr-2 mb-2"
+              className="bg-[#0D9F70] py-3 rounded-full w-full mb-2 flex-row justify-center items-center"
               onPress={() => updateMilestoneStatus(milestone.id, "accepted")}
               disabled={updating || selectedMilestoneId === milestone.id}
+              style={{
+                elevation: 2,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 1.5,
+              }}
             >
-              <Text className="text-white font-pmedium">Accept Milestone</Text>
+              <Check size={18} color="#fff" />
+              <Text className="ml-2 text-white font-pmedium">Accept Milestone</Text>
             </TouchableOpacity>
           )}
 
           {!isJobOwner && milestone.status === "accepted" && (
             <TouchableOpacity
-              className="bg-yellow-500 px-4 py-2 rounded-full mr-2 mb-2"
+              className="bg-[#F59E0B] py-3 rounded-full w-full mb-2 flex-row justify-center items-center"
               onPress={() => updateMilestoneStatus(milestone.id, "completed")}
               disabled={updating || selectedMilestoneId === milestone.id}
+              style={{
+                elevation: 2,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 1.5,
+              }}
             >
-              <Text className="text-white font-pmedium">Mark Work as Completed</Text>
+              <FileCheck size={18} color="#fff" />
+              <Text className="ml-2 text-white font-pmedium">Mark Work as Completed</Text>
             </TouchableOpacity>
           )}
 
           {!isJobOwner && milestone.status === "payment_released" && (
             <TouchableOpacity
-              className="bg-green-500 px-4 py-2 rounded-full mr-2 mb-2"
+              className="bg-[#10B981] py-3 rounded-full w-full mb-2 flex-row justify-center items-center"
               onPress={() => updateMilestoneStatus(milestone.id, "payment_received")}
               disabled={updating || selectedMilestoneId === milestone.id}
+              style={{
+                elevation: 2,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 1.5,
+              }}
             >
-              <Text className="text-white font-pmedium">Confirm Payment Received</Text>
+              <CheckCircle size={18} color="#fff" />
+              <Text className="ml-2 text-white font-pmedium">Confirm Payment Received</Text>
             </TouchableOpacity>
           )}
 
           {/* Job owner actions */}
           {isJobOwner && milestone.status === "completed" && (
-            <TouchableOpacity
-              className="bg-purple-500 px-4 py-2 rounded-full mr-2 mb-2"
-              onPress={() => {
-                setMilestoneToPayFor(milestone)
-                setShowPaymentProofModal(true)
-              }}
-              disabled={updating || uploadingProof || selectedMilestoneId === milestone.id}
-            >
-              <View className="flex-row items-center">
-                <Upload size={16} color="#fff" className="mr-1" />
-                <Text className="text-white font-pmedium">Upload Payment Proof</Text>
-              </View>
-            </TouchableOpacity>
+            <View className="w-full">
+              {/* Upload Proof Button */}
+              <TouchableOpacity
+                className="bg-[#0D9F70] py-3 rounded-full w-full mb-2 flex-row justify-center items-center"
+                onPress={() => {
+                  setMilestoneToPayFor(milestone)
+                  setShowPaymentProofModal(true)
+                }}
+                disabled={updating || uploadingProof || selectedMilestoneId === milestone.id}
+                style={{
+                  elevation: 2,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 1.5,
+                }}
+              >
+                <Upload size={18} color="#fff" />
+                <Text className="ml-2 text-white font-pmedium">Upload Proof</Text>
+              </TouchableOpacity>
+
+              {/* Add Stripe payment option */}
+              <StripePaymentHandler
+                milestone={milestone}
+                chatId={chatId}
+                onPaymentComplete={() => {
+                  // Show a message that payment is being processed
+                  showNextSteps("Payment Processing", "Your payment is being processed. Here's what happens next:", [
+                    "Stripe will process your payment",
+                    "Once confirmed, the milestone will be automatically updated",
+                    "The freelancer will be notified of the payment",
+                  ])
+                }}
+              />
+            </View>
           )}
 
           {updating && selectedMilestoneId === milestone.id && (
@@ -1146,7 +1391,7 @@ export const MilestonesModal = ({
               </View>
 
               <TouchableOpacity
-                className="bg-[#0D9F70] py-4 rounded-lg flex-row justify-center items-center mt-2"
+                className="bg-[#0D9F70] py-4 rounded-full flex-row justify-center items-center mt-2"
                 onPress={selectImageForPaymentProof}
                 disabled={uploadingProof}
               >
@@ -1296,6 +1541,117 @@ export const MilestonesModal = ({
     )
   }
 
+  // Payment Method Selection Modal
+  const renderPaymentMethodModal = () => {
+    return (
+      <Modal visible={showPaymentMethodModal} animationType="fade" transparent={true}>
+        <View className="flex-1 bg-black/50 justify-end">
+          <Animated.View
+            style={{
+              transform: [{ translateY: showPaymentMethodModal ? 0 : 300 }],
+              maxHeight: "80%",
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              backgroundColor: "white",
+              overflow: "hidden",
+            }}
+          >
+            <View className="w-12 h-1.5 bg-gray-300 rounded-full self-center my-3" />
+
+            <View className="px-6 py-2 flex-row justify-between items-center">
+              <Text className="text-xl font-pbold text-gray-800">Payment Options</Text>
+              <TouchableOpacity
+                onPress={() => setShowPaymentMethodModal(false)}
+                className="p-2 rounded-full bg-gray-100"
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView className="px-6" showsVerticalScrollIndicator={false}>
+              {milestoneToPayFor && (
+                <View className="mb-4 mt-2">
+                  <Text className="text-gray-700 font-pbold mb-2">Milestone Details:</Text>
+                  <View className="bg-gray-50 p-3 rounded-lg">
+                    <Text className="font-pmedium text-gray-800">{milestoneToPayFor.title}</Text>
+                    <Text className="text-gray-600 text-sm mt-1">{milestoneToPayFor.description}</Text>
+                    <View className="flex-row items-center mt-2">
+                      <DollarSign size={16} color="#0D9F70" />
+                      <Text className="text-gray-800 font-pmedium ml-1">
+                        {proposal?.currency || "$"}
+                        {Number.parseFloat(milestoneToPayFor.amount).toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              <PaymentMethodSelector
+                milestone={milestoneToPayFor}
+                chatId={chatId}
+                onSelectManualPayment={() => {
+                  setShowPaymentMethodModal(false)
+                  setShowPaymentProofModal(true)
+                }}
+                onPaymentComplete={(method) => {
+                  if (method === "stripe") {
+                    // The actual payment will be handled by the StripePaymentHandler
+                    // Just close this modal
+                    setShowPaymentMethodModal(false)
+                  }
+                }}
+              />
+
+              {milestoneToPayFor && (
+                <View className="mt-4 mb-8">
+                  <Text className="text-gray-700 font-pbold mb-2">Pay with Stripe:</Text>
+                  <StripePaymentHandler
+                    milestone={milestoneToPayFor}
+                    chatId={chatId}
+                    onPaymentComplete={() => {
+                      setShowPaymentMethodModal(false)
+                      // The webhook will handle the status update
+                    }}
+                    currency={proposal?.currency || "$"}
+                  />
+                </View>
+              )}
+            </ScrollView>
+          </Animated.View>
+        </View>
+      </Modal>
+    )
+  }
+
+  // Review Modal
+  const renderReviewModal = () => {
+    return (
+      <ReviewModal
+        isVisible={showReviewModal}
+        onClose={() => setShowReviewModal(false)}
+        chatId={chatId}
+        jobId={jobId}
+        proposalId={proposalId}
+        isJobOwner={isJobOwner}
+        freelancerId={chat?.proposal_owner_id}
+        clientId={chat?.job_owner_id}
+        onReviewSubmitted={handleReviewSubmitted}
+      />
+    )
+  }
+
+  // Review Detail Modal
+  const renderReviewDetailModal = () => {
+    return (
+      <ReviewDetailModal
+        isVisible={showReviewDetailModal}
+        onClose={() => setShowReviewDetailModal(false)}
+        review={selectedReview}
+      />
+    )
+  }
+
   return (
     <Modal visible={isVisible} animationType="fade" transparent={true} onRequestClose={onClose}>
       <View className="flex-1 bg-black/60 justify-end">
@@ -1394,7 +1750,61 @@ export const MilestonesModal = ({
                   }}
                 />
               </View>
+
+              {/* Additional status message based on budget allocation and completion */}
+              {remainingAmount <= 0 && (
+                <View className="mt-2 pt-2 border-t border-gray-100">
+                  <Text
+                    className={`text-sm ${allMilestonesCompleted ? "text-green-600" : "text-blue-600"} font-pmedium`}
+                  >
+                    {jobCompleted
+                      ? "🎉 Job is completed! All milestones finished successfully."
+                      : allMilestonesCompleted
+                        ? "All milestones completed! Job can be marked as complete."
+                        : "Budget fully allocated. Complete all milestones to finish job."}
+                  </Text>
+                </View>
+              )}
             </View>
+
+            {/* Reviews section - show if job is completed */}
+            {jobCompleted && (
+              <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-100">
+                <Text className="font-pbold text-gray-800 text-lg mb-3">Job Reviews</Text>
+
+                {reviews.length > 0 ? (
+                  <View>
+                    {reviews.map((review) => (
+                      <TouchableOpacity key={review.id} onPress={() => handleViewReview(review)} className="mb-3">
+                        <ReviewBadge
+                          rating={review.rating}
+                          transactionHash={review.blockchain_tx_hash}
+                          verified={review.blockchain_verified}
+                          onPress={() => handleViewReview(review)}
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : (
+                  <View className="bg-gray-50 p-3 rounded-lg">
+                    <Text className="text-gray-500 text-center">No reviews yet</Text>
+                  </View>
+                )}
+
+                {/* Add review button if user hasn't submitted one yet */}
+                {!hasSubmittedReview && (
+                  <TouchableOpacity
+                    className="bg-[#0D9F70] py-3 rounded-full flex-row justify-center items-center mt-3"
+                    onPress={() => setShowReviewModal(true)}
+                  >
+                    <Star size={18} color="#fff" />
+                    <Text className="ml-2 text-white font-pmedium">
+                      {isJobOwner ? "Review Freelancer" : "Review Client"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
 
             {/* Show milestone status flow diagram */}
             {renderMilestoneStatusFlow()}
@@ -1448,13 +1858,49 @@ export const MilestonesModal = ({
               : // For fixed price projects - milestone button for job owner
                 isJobOwner && (
                   <TouchableOpacity
-                    className="bg-[#0D9F70] py-3 rounded-full flex-row justify-center items-center"
-                    onPress={() => setShowAddMilestoneModal(true)}
+                    className={`py-3 rounded-full flex-row justify-center items-center ${
+                      remainingAmount > 0 ? "bg-[#0D9F70]" : "bg-gray-300"
+                    }`}
+                    onPress={() => remainingAmount > 0 && setShowAddMilestoneModal(true)}
+                    disabled={remainingAmount <= 0}
                   >
-                    <Plus size={18} color="#fff" />
-                    <Text className="ml-2 text-white font-pmedium">Add Milestone</Text>
+                    <Plus size={18} color={remainingAmount > 0 ? "#fff" : "#888"} />
+                    <Text className={`ml-2 font-pmedium ${remainingAmount > 0 ? "text-white" : "text-gray-500"}`}>
+                      {remainingAmount > 0 ? "Add Milestone" : "Budget Fully Allocated"}
+                    </Text>
                   </TouchableOpacity>
                 )}
+
+            {/* Show Complete Job button when all milestones are completed */}
+            {isJobOwner && !agreement?.is_hourly && remainingAmount <= 0 && allMilestonesCompleted && !jobCompleted && (
+              <TouchableOpacity
+                className="bg-[#10B981] py-3 rounded-full flex-row justify-center items-center mt-3"
+                onPress={completeJob}
+              >
+                <CheckCircle size={18} color="#fff" />
+                <Text className="ml-2 text-white font-pmedium">Mark Job as Complete</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Show job completed message */}
+            {jobCompleted && !hasSubmittedReview && (
+              <TouchableOpacity
+                className="bg-[#0D9F70] py-3 rounded-full flex-row justify-center items-center mt-3"
+                onPress={() => setShowReviewModal(true)}
+              >
+                <Star size={18} color="#fff" />
+                <Text className="ml-2 text-white font-pmedium">
+                  {isJobOwner ? "Review Freelancer" : "Review Client"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {jobCompleted && hasSubmittedReview && (
+              <View className="bg-green-50 p-3 rounded-lg flex-row items-center mt-3">
+                <CheckCircle size={18} color="#15803D" />
+                <Text className="ml-2 text-green-800 font-pmedium">Job successfully completed!</Text>
+              </View>
+            )}
           </View>
         </Animated.View>
       </View>
@@ -1463,9 +1909,12 @@ export const MilestonesModal = ({
       {renderAddMilestoneModal()}
       {renderTimesheetModal()}
       {renderPaymentProofModal()}
+      {renderPaymentMethodModal()}
       {renderImagePreviewModal()}
       {renderFullScreenImageModal()}
       {renderNextStepsModal()}
+      {renderReviewModal()}
+      {renderReviewDetailModal()}
     </Modal>
   )
 }
